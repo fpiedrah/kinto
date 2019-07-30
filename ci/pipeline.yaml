@@ -1,0 +1,27 @@
+---
+resources:
+  - name: kinto-git
+    type: git
+    icon: github-circle
+    source:
+      uri: https://github.com/fpiedrah/kinto
+      branch: ci-test
+
+jobs:
+  - name: test-kinto
+    public: true
+    plan:
+      - get: kinto-git
+        trigger: true
+      - task: list-files
+        config:
+          inputs:
+            - name: kinto-git
+          platform: linux
+          image_resource:
+            type: registry-image
+            source: { repository: busybox }
+          run:
+            #path: ./kinto-git/ci/scripts/run-tests
+            path: ls
+            args: ["-la", "./kinto-git"]

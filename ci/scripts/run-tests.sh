@@ -6,4 +6,4 @@ pwd
 ls -al
 echo "jasdflkjsadflkjsadflkjhewrqkjnsadf"
 #make ../../install-dev
-#make ../../test
+

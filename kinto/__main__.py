@@ -5,8 +5,9 @@ import sys
 import logging
 import logging.config
 
-from kinto.core import scripts
-from kinto.plugins.accounts.scripts import create_user
+from kinto.core import scripts as core_scripts
+from kinto import scripts as kinto_scripts
+from kinto.plugins.accounts import scripts as accounts_scripts
 from pyramid.scripts import pserve
 from pyramid.paster import bootstrap
 from kinto import __version__
@@ -23,12 +24,12 @@ def main(args=None):
     if args is None:
         args = sys.argv[1:]
 
-    parser = argparse.ArgumentParser(description="Kinto Command-Line " "Interface")
+    parser = argparse.ArgumentParser(description="Kinto Command-Line Interface")
     commands = (
         "init",
         "start",
         "migrate",
-        "delete-collection",
+        "flush-cache",
         "version",
         "rebuild-quotas",
         "create-user",
@@ -93,26 +94,22 @@ def main(args=None):
                 required=False,
                 default="127.0.0.1",
             )
+
         elif command == "migrate":
             subparser.add_argument(
                 "--dry-run",
                 action="store_true",
-                help="Simulate the migration operations " "and show information",
+                help="Simulate the migration operations and show information",
                 dest="dry_run",
                 required=False,
                 default=False,
             )
-        elif command == "delete-collection":
-            subparser.add_argument(
-                "--bucket", help="The bucket where the collection " "belongs to.", required=True
-            )
-            subparser.add_argument("--collection", help="The collection to remove.", required=True)
 
         elif command == "rebuild-quotas":
             subparser.add_argument(
                 "--dry-run",
                 action="store_true",
-                help="Simulate the rebuild operation " "and show information",
+                help="Simulate the rebuild operation and show information",
                 dest="dry_run",
                 required=False,
                 default=False,
@@ -154,7 +151,7 @@ def main(args=None):
 
     if which_command == "init":
         if os.path.exists(config_file):
-            print("{} already exists.".format(config_file), file=sys.stderr)
+            print(f"{config_file} already exists.", file=sys.stderr)
             return 1
 
         backend = parsed_args["backend"]
@@ -216,22 +213,22 @@ def main(args=None):
     elif which_command == "migrate":
         dry_run = parsed_args["dry_run"]
         env = bootstrap(config_file, options={"command": "migrate"})
-        scripts.migrate(env, dry_run=dry_run)
+        core_scripts.migrate(env, dry_run=dry_run)
 
-    elif which_command == "delete-collection":
-        env = bootstrap(config_file, options={"command": "delete-collection"})
-        return scripts.delete_collection(env, parsed_args["bucket"], parsed_args["collection"])
+    elif which_command == "flush-cache":
+        env = bootstrap(config_file, options={"command": "flush-cache"})
+        core_scripts.flush_cache(env)
 
     elif which_command == "rebuild-quotas":
         dry_run = parsed_args["dry_run"]
         env = bootstrap(config_file, options={"command": "rebuild-quotas"})
-        return scripts.rebuild_quotas(env, dry_run=dry_run)
+        return kinto_scripts.rebuild_quotas(env, dry_run=dry_run)
 
     elif which_command == "create-user":
         username = parsed_args["username"]
         password = parsed_args["password"]
         env = bootstrap(config_file, options={"command": "create-user"})
-        return create_user(env, username=username, password=password)
+        return accounts_scripts.create_user(env, username=username, password=password)
 
     elif which_command == "start":
         pserve_argv = ["pserve"]
@@ -246,7 +243,7 @@ def main(args=None):
             pserve_argv.append("-q")
 
         pserve_argv.append(config_file)
-        pserve_argv.append("http_port={}".format(parsed_args["port"]))
+        pserve_argv.append(f"http_port={parsed_args['port']}")
         pserve.main(argv=pserve_argv)
 
     else:

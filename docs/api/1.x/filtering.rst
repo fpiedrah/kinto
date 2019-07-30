@@ -69,7 +69,7 @@ Search in array fields
 
 * ``/collection?contains_any_field=value``
 
-  Same as the previous filter, but in the value is a list, it matches
+  Same as the previous filter, but if the value is a list, it matches
   all records whose field contains at least one of the listed values.
 
 Examples:
@@ -101,8 +101,8 @@ The filters ``lt`` and ``gt`` are available to compare against values.
   than 100.
 
 This bound is exclusive (i.e., in the previous example, it would not
-retrieve a record whose ``orders`` field was equal to 100. To check
-"less than or equal", use ``min``. To check "greater than or equal",
+retrieve a record whose ``orders`` field was equal to 100). To check
+"greater than or equal", use ``min``. To check "less than or equal",
 use ``max``.
 
 * ``/collection?min_orders=100``
@@ -208,13 +208,12 @@ collection was not changed, a |status-304| response is returned.
 
     HTTP/1.1 200 OK
     Access-Control-Allow-Origin: *
-    Access-Control-Expose-Headers: Backoff, Retry-After, Alert, Content-Length, ETag, Next-Page, Total-Records, Last-Modified
+    Access-Control-Expose-Headers: Backoff, Retry-After, Alert, Content-Length, ETag, Next-Page, Last-Modified
     Content-Length: 436
     Content-Type: application/json; charset=UTF-8
     Date: Tue, 28 Apr 2015 12:08:11 GMT
     Last-Modified: Mon, 12 Apr 2015 11:12:07 GMT
     ETag: "1430222877724"
-    Total-Records: 2
 
     {
         "data": [

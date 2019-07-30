@@ -3,26 +3,204 @@ Changelog
 
 This document describes changes between each past release.
 
-11.2.0 (unreleased)
+13.3.0 (unreleased)
+-------------------
+
+**Bug fixes**
+
+- Fix unexpected exception in ``/__version__`` endpoint
+
+
+13.2.2 (2019-07-04)
+-------------------
+
+**Bug fixes**
+
+- Fix apparence of Admin notifications (fixes #2191)
+- Fix intermittent failure when comparing timestamps in ConfigTest (fixes #2129)
+
+
+13.2.1 (2019-06-21)
+-------------------
+
+**Internal changes**
+
+- Upgrade kinto-admin to v1.24.1
+
+
+13.2.0 (2019-06-18)
+-------------------
+
+**Internal changes**
+
+- Upgrade kinto-admin to v1.24.0
+
+
+13.1.1 (2019-05-23)
+-------------------
+
+**Bug fixes**
+
+- Fix cache heartbeat test (fixes #2107)
+- Fix support of ``sqlalchemy.pool.NullPool`` for PostgreSQL backends.
+  The default ``pool_size`` of 25 is maintained on the default pool class
+  (``QueuePoolWithMaxBacklog``). When using custom connection pools, please
+  refer to SQLAlchemy documentation for default values.
+
+
+**Internal changes**
+
+- Remove dependency to kinto-redis in core tests
+
+
+13.1.0 (2019-03-20)
 -------------------
 
 **New features**
 
-- Kinto now returns 500 FileNotFoundError instead of 404 if the version file cannot be found (fixes #1841)
+- Expose the user_profile in the user field of the hello page. (#1989)
+- Add an "account validation" option to the accounts plugin. (#1973)
+- Add a ``validate`` endpoint at ``/accounts/{user id}/validate/{validation
+  key}`` which can be used to validate an account when the *account
+  validation* option is enabled on the accounts plugin.
+- Add a ``reset-password`` endpoint at ``/accounts/(user
+  id)/reset-password`` which can be used to reset a user's password when the
+  *account validation* option is enabled on the accounts plugin.
+
+**Bug fixes**
+
+- Fixed two potential bugs relating to mutable default values.
+- Fix crash on validating records with errors in arrays (#1508)
+- Fix crash on deleting multiple accounts (#2009)
+
+**Documentation**
+
+- Fixed spelling and Filtering docs
+
+**Internal changes**
+
+- Use ``setup.cfg`` for package metadata (ref #1921)
+
+
+API is now at version **1.22**. See `API changelog`_.
+
+
+13.0.1 (2019-01-29)
+-------------------
+
+**Bug fixes**
+
+- Loosen up the Content-Security policies in the Kinto Admin plugin to prevent Webpack inline script to be rejected (fixes #2000)
+
+
+13.0.0 (2019-01-25)
+-------------------
+
+**Breaking changes**
+
+- Update Kinto OpenID plugin to redirect with a base64 JSON encoded token. (#1988).
+  *This will work with kinto-admin 1.23*
+
+**Bug fixes**
+
+- **security**: Fix a pagination bug in the PostgreSQL backend that could leak records between collections
+
+**Internal changes**
+
+- Upgrade kinto-admin to v1.23.0
+
+12.0.2 (2019-01-25)
+-------------------
+
+**Bug fixes**
+
+- **security**: Fix a pagination bug in the PostgreSQL backend that could leak records between collections
+
+
+12.0.1 (2019-01-21)
+-------------------
+
+**Bug Fixes**
+
+- Fix bumping of tombstones timestamps when deleting objects in PostgreSQL storage backend (fixes #1981)
+- Fix ETag header in responses of DELETE on plural endpoints (ref #1981)
+
+12.0.0 (2019-01-10)
+-------------------
+
+**Breaking changes**
+
+- Remove Python 3.5 support and upgrade to Python 3.6. (#1886)
+- Remove ``record`` from UnicityError class (#1919). This enabled us to fix #1545.
+- Storage backend API has changed, notions of collection and records were replaced
+  by the generic terms *resource* and *object*. Plugins that subclass the internal
+  ``ShareableResource`` class may also break.
+- GET requests no longer include the ``Total-Records`` header. To get a count in a collection
+  you need to do a HEAD request. And the new header name is ``Total-Objects``. (#1624)
+- Remove the ``UserResource`` class. And ``ShareableResource`` is now deprecated in
+  favor of ``Resource``.
+- Removed ``kinto.core.utils.parse_resource()`. Use ``kinto.core.utils.view_lookup_registry()`` instead (#1828)
+- Remove delete-collection command (#1959)
+
+API is now at version **1.21**. See `API changelog`_.
+
+**New features**
+
+- Add a ``user-data`` endpoint at ``/__user_data__/`` which can be used to delete all data
+  associated with a principal. This might be helpful for pursuing GDPR
+  compliance, for instance. (Fixes #442.)
+
+**Bug Fixes**
+
+- Like query now returns 400 when a non string value is used. (#1899)
+- Record ID is validated if explicitly mentioned in the collection schema (#1942)
+- The Memory permission backend implementation of ``remove_principal``
+  is now less generous with what it removes (#1955).
+
+**Documentation**
+
+- Change PostgreSQL backend URLs to be ``postgresql://`` instead of the deprecated ``postgres://``
+
+**Internal changes**
+
+- Remove depreciation warning for ``mapping`` (#1904)
+- Fix depreciated warn method (#1903)
+- Use f-string instead of % or format operators. (#1886)
+- Ignore admin plugin node_modules folder while running black (#1902)
+- Remove regexp py36 warnings. (#1907)
+- Changed psycopg2 dependency for psycopg2-binary. (#1905)
+- Renamed core notions (ie. record and collection) (#710)
+- JSON Schema validation is optimized by keeping instances of validator cached. (#1807)
+
+11.2.1 (2018-12-09)
+-------------------
+
+- Still supports jsonschema 2.6 before 3.0 is released as a production release. (#1923)
+
+
+11.2.0 (2018-11-29)
+-------------------
+
+**New features**
+
+- Return a ``500 Internal Error`` on ``__version__`` instead of 404 if the version file
+  cannot be found (fixes #1841)
 
 **Bug fixes**
 
 - Fix the ``http_api_version`` exposed in the ``/v1/`` endpoint. The
   version ``1.20`` was getting parsed as a number ``1.2``.
-- Fix `record:create` not taken into account from settings. (Fixes #1813)
+- Fix ``record:create`` not taken into account from settings. (fixes #1813)
 
 **Internal changes**
 
 - Build the admin on the CI. (#1857)
+- Migrate JSON Hyper-Schema to Draft-07 (#1808)
 
 **Documentation**
 
 - Add documentation on troubleshooting Auth0 multiauth issue. (#1889)
+
 
 11.1.0 (2018-10-25)
 -------------------

@@ -11,11 +11,11 @@ from kinto.core.storage import exceptions as storage_exceptions
 
 logger = logging.getLogger(__name__)
 
-# A permission is called "dynamic" when it's computed at request time.
-DYNAMIC = "dynamic"
-
 # When permission is set to "private", only the current user is allowed.
 PRIVATE = "private"
+
+# A permission is called "dynamic" when it's computed at request time.
+DYNAMIC = "dynamic"
 
 
 def groupfinder(userid, request):
@@ -54,14 +54,15 @@ class AuthorizationPolicy:
 
     def permits(self, context, principals, permission):
         if permission == PRIVATE:
+            # When using the private permission, we bypass the permissions
+            # backend, and simply authorize if authenticated.
             return Authenticated in principals
 
         principals = context.get_prefixed_principals()
 
-        if permission == DYNAMIC:
-            permission = context.required_permission
+        create_permission = f"{context.resource_name}:create"
 
-        create_permission = "{}:create".format(context.resource_name)
+        permission = context.required_permission
         if permission == "create":
             permission = create_permission
 
@@ -76,18 +77,18 @@ class AuthorizationPolicy:
         # If not allowed to delete/patch, and target object is missing, and
         # allowed to read the parent, then view is permitted (will raise 404
         # later anyway). See Kinto/kinto#918
-        is_record_unknown = not context.on_collection and context.current_record is None
-        if context.required_permission == "write" and is_record_unknown:
+        is_object_unknown = not context.on_plural_endpoint and context.current_object is None
+        if context.required_permission == "write" and is_object_unknown:
             bound_perms = self._get_bound_permissions(parent_uri, "read")
             allowed = context.check_permission(principals, bound_perms)
 
-        # If not allowed on this collection, but some records are shared with
+        # If not allowed on this plural endpoint, but some objects are shared with
         # the current user, then authorize.
-        # The ShareableResource class will take care of the filtering.
-        is_list_operation = context.on_collection and not permission.endswith("create")
+        # The :class:`kinto.core.resource.Resource` class will take care of the filtering.
+        is_list_operation = context.on_plural_endpoint and not permission.endswith("create")
         if not allowed and is_list_operation:
             allowed = bool(
-                context.fetch_shared_records(permission, principals, self.get_bound_permissions)
+                context.fetch_shared_objects(permission, principals, self.get_bound_permissions)
             )
             if not allowed:
                 # If allowed to create this kind of object on parent,
@@ -99,7 +100,7 @@ class AuthorizationPolicy:
                 allowed = context.check_permission(principals, bound_perms)
 
         if not allowed:
-            logger.warn(
+            logger.warning(
                 "Permission %r on %r not granted to %r.",
                 permission,
                 object_id,
@@ -111,7 +112,11 @@ class AuthorizationPolicy:
 
     def _get_bound_permissions(self, object_id, permission):
         if self.get_bound_permissions is None:
-            return [(object_id, permission)]
+            # Permission to 'write' gives permission to 'read'.
+            bound = [(object_id, permission)]
+            if permission == "read":
+                bound += [(object_id, "write")]
+            return bound
         return self.get_bound_permissions(object_id, permission)
 
     def principals_allowed_by_permission(self, context, permission):
@@ -120,10 +125,10 @@ class AuthorizationPolicy:
 
 class RouteFactory:
     resource_name = None
-    on_collection = False
+    on_plural_endpoint = False
     required_permission = None
     permission_object_id = None
-    current_record = None
+    current_object = None
     shared_ids = None
 
     method_permissions = {
@@ -149,22 +154,26 @@ class RouteFactory:
         )
         if is_on_resource:
             self.resource_name = request.current_resource_name
-            self.on_collection = getattr(service, "type", None) == "collection"
+            self.on_plural_endpoint = getattr(service, "type", None) == "plural"
 
             # Try to fetch the target object. Its existence will affect permissions checking.
-            if not self.on_collection and request.method.lower() in ("put", "delete", "patch"):
+            if not self.on_plural_endpoint and request.method.lower() in (
+                "put",
+                "delete",
+                "patch",
+            ):
                 resource = service.resource(request=request, context=self)
                 try:
                     # Save a reference, to avoid refetching from storage in resource.
-                    self.current_record = resource.model.get_record(resource.record_id)
-                except storage_exceptions.RecordNotFoundError:
+                    self.current_object = resource.model.get_object(resource.object_id)
+                except storage_exceptions.ObjectNotFoundError:
                     pass
 
             self.permission_object_id, self.required_permission = self._find_required_permission(
                 request, service
             )
 
-            # To obtain shared records on a collection endpoint, use a match:
+            # To obtain shared objects on a plural endpoint, use a match:
             self._object_id_match = self.get_permission_object_id(request, "*")
 
         self._settings = request.registry.settings
@@ -178,27 +187,27 @@ class RouteFactory:
         for (_, permission) in bound_perms:
             # With Kinto inheritance tree, we can have: `permission = "record:create"`
             if self.resource_name and permission.startswith(self.resource_name):
-                setting = "{}_principals".format(permission.replace(":", "_"))
+                setting = f"{permission.replace(':', '_')}_principals"
             else:
-                setting = "{}_{}_principals".format(self.resource_name, permission)
+                setting = f"{self.resource_name}_{permission}_principals"
             allowed_principals = aslist(self._settings.get(setting, ""))
             if allowed_principals:
                 if bool(set(allowed_principals) & set(principals)):
                     return True
         return self._check_permission(principals, bound_perms)
 
-    def fetch_shared_records(self, perm, principals, get_bound_permissions):
-        """Fetch records that are readable or writable for the current
+    def fetch_shared_objects(self, perm, principals, get_bound_permissions):
+        """Fetch objects that are readable or writable for the current
         principals.
 
         See :meth:`kinto.core.authorization.AuthorizationPolicy.permits`
 
-        If no record is shared, it returns None.
+        If no object is shared, it returns None.
 
         .. warning::
             This sets the ``shared_ids`` attribute to the context with the
             return value. The attribute is then read by
-            :class:`kinto.core.resource.ShareableResource`
+            :class:`kinto.core.resource.Resource`
         """
         if get_bound_permissions:
             bound_perms = get_bound_permissions(self._object_id_match, perm)
@@ -206,14 +215,14 @@ class RouteFactory:
             bound_perms = [(self._object_id_match, perm)]
         by_obj_id = self._get_accessible_objects(principals, bound_perms, with_children=False)
         ids = by_obj_id.keys()
-        # Store for later use in ``ShareableResource``.
+        # Store for later use in ``Resource``.
         self.shared_ids = [self._extract_object_id(id_) for id_ in ids]
         return self.shared_ids
 
     def get_permission_object_id(self, request, object_id=None):
         """Returns the permission object id for the current request.
         In the nominal case, it is just the current URI without version prefix.
-        For collections, it is the related record URI using the specified
+        For plural endpoint, it is the related object URI using the specified
         `object_id`.
 
         See :meth:`kinto.core.resource.model.SharableModel` and
@@ -221,19 +230,19 @@ class RouteFactory:
         """
         object_uri = utils.strip_uri_prefix(request.path)
 
-        if self.on_collection and object_id is not None:
-            # With the current request on a collection, the record URI must
-            # be found out by inspecting the collection service and its sibling
-            # record service.
+        if self.on_plural_endpoint and object_id is not None:
+            # With the current request on a plural endpoint, the object URI must
+            # be found out by inspecting the "plural" service and its sibling
+            # "object" service. (see `register_resource()`)
             matchdict = {**request.matchdict, "id": object_id}
             try:
                 object_uri = utils.instance_uri(request, self.resource_name, **matchdict)
                 object_uri = object_uri.replace("%2A", "*")
             except KeyError:
-                # Maybe the resource has no single record endpoint.
+                # Maybe the resource has no single object endpoint.
                 # We consider that object URIs in permissions backend will
                 # be stored naively:
-                object_uri = "{}/{}".format(object_uri, object_id)
+                object_uri = f"{object_uri}/{object_id}"
 
         return object_uri
 
@@ -246,8 +255,8 @@ class RouteFactory:
         permission.
 
         .. note::
-            This method saves an attribute ``self.current_record`` used
-            in :class:`kinto.core.resource.UserResource`.
+            This method saves an attribute ``self.current_object`` used
+            in :class:`kinto.core.resource.Resource`.
         """
         # By default, it's a URI a and permission associated to the method.
         permission_object_id = self.get_permission_object_id(request)
@@ -255,22 +264,22 @@ class RouteFactory:
         required_permission = self.method_permissions.get(method)
 
         # For create permission, the object id is the plural endpoint.
-        collection_path = str(service.collection_path)
-        collection_path = collection_path.format_map(request.matchdict)
+        plural_path = str(service.plural_path)
+        plural_path = plural_path.format_map(request.matchdict)
 
-        # In the case of a "PUT", check if the targetted record already
+        # In the case of a "PUT", check if the targetted object already
         # exists, return "write" if it does, "create" otherwise.
         if request.method.lower() == "put":
-            if self.current_record is None:
-                # The record does not exist, the permission to create on
-                # the related collection is required.
-                permission_object_id = collection_path
+            if self.current_object is None:
+                # The object does not exist, the permission to create on
+                # the related plural endpoint is required.
+                permission_object_id = plural_path
                 required_permission = "create"
             else:
                 # For safe creations, the user needs a create permission.
                 # See Kinto/kinto#792
                 if request.headers.get("If-None-Match") == "*":
-                    permission_object_id = collection_path
+                    permission_object_id = plural_path
                     required_permission = "create"
                 else:
                     required_permission = "write"

@@ -130,11 +130,11 @@ Select your database server address, name and user by editing the configuration 
 .. code-block:: python
 
     kinto.storage_backend = kinto.core.storage.postgresql
-    kinto.storage_url = postgres://dbuser:dbpassword@localhost/dbname
+    kinto.storage_url = postgresql://dbuser:dbpassword@localhost/dbname
     kinto.cache_backend = kinto.core.cache.postgresql
-    kinto.cache_url = postgres://dbuser:dbpassword@localhost/dbname
+    kinto.cache_url = postgresql://dbuser:dbpassword@localhost/dbname
     kinto.permission_backend = kinto.core.permission.postgresql
-    kinto.permission_url = postgres://dbuser:dbpassword@localhost/dbname
+    kinto.permission_url = postgresql://dbuser:dbpassword@localhost/dbname
 
 
 Creating tables and indices
@@ -181,7 +181,7 @@ adjustments:
 .. note::
 
     For an exhaustive list of available settings and their default values,
-    refer to the *Kinto* :github:`source code <Kinto/kinto/blob/11.1.0/kinto/core/__init__.py#L27-L98>`.
+    refer to the *Kinto* :github:`source code <Kinto/kinto/blob/13.2.1/kinto/core/__init__.py#L34-L103>`.
 
 
 By default, nobody can read buckets list. You can change that using:

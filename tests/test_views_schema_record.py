@@ -1,4 +1,5 @@
 from kinto.core.testing import unittest
+from kinto.schema_validation import validate_schema
 
 from .support import BaseWebTest
 
@@ -18,6 +19,7 @@ SCHEMA = {
             "type": "object",
             "properties": {"size": {"type": "number"}, "name": {"type": "string"}},
         },
+        "tags": {"type": "array", "items": {"type": "string"}},
     },
     "required": ["title"],
 }
@@ -107,6 +109,9 @@ class RecordsValidationTest(BaseWebTestWithSchema, unittest.TestCase):
         )
         self.collection = resp.json["data"]
 
+    def test_validate_schema(self):
+        validate_schema(VALID_RECORD, SCHEMA, id_field="id")
+
     def test_empty_record_can_be_validated(self):
         self.app.post_json(RECORDS_URL, {"data": {}}, headers=self.headers, status=400)
 
@@ -119,6 +124,11 @@ class RecordsValidationTest(BaseWebTestWithSchema, unittest.TestCase):
             {"data": {"body": "<h1>Without title</h1>"}},
             headers=self.headers,
             status=400,
+        )
+
+    def test_records_are_invalid_if_do_not_match_schema_in_array(self):
+        self.app.post_json(
+            RECORDS_URL, {"data": {**VALID_RECORD, "tags": [0]}}, headers=self.headers, status=400
         )
 
     def test_records_are_validated_on_patch(self):
@@ -270,6 +280,20 @@ class InternalRequiredProperties(BaseWebTestWithSchema, unittest.TestCase):
             headers=self.headers,
             status=400,
         )
+
+
+class ValidateIDField(BaseWebTestWithSchema, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        # See bug Kinto/kinto#1942
+        schema = {"type": "object", "properties": {"id": {"type": "string", "pattern": "^[0-7]$"}}}
+        self.app.put_json(COLLECTION_URL, {"data": {"schema": schema}}, headers=self.headers)
+
+    def test_record_id_is_accepted_if_valid(self):
+        self.app.post_json(RECORDS_URL, {"data": {"id": "1"}}, headers=self.headers)
+
+    def test_record_id_is_rejected_if_does_not_match(self):
+        self.app.post_json(RECORDS_URL, {"data": {"id": "a"}}, headers=self.headers, status=400)
 
 
 class BucketRecordSchema(BaseWebTestWithSchema, unittest.TestCase):

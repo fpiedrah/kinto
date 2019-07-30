@@ -8,28 +8,28 @@ BATCH_SIZE = 25
 
 
 def paginated(storage, *args, sorting, batch_size=BATCH_SIZE, **kwargs):
-    """A generator used to access paginated results from storage.get_all.
+    """A generator used to access paginated results from storage.list_all.
 
-    :param kwargs: Passed through unchanged to get_all.
+    :param kwargs: Passed through unchanged to list_all.
     """
 
     if len(sorting) > 1:
         raise NotImplementedError("FIXME: only supports one-length sorting")  # pragma: nocover
     pagination_direction = COMPARISON.GT if sorting[0].direction > 0 else COMPARISON.LT
 
-    record_pagination = None
+    object_pagination = None
     while True:
-        (records, _) = storage.get_all(
-            sorting=sorting, limit=batch_size, pagination_rules=record_pagination, **kwargs
+        objects = storage.list_all(
+            sorting=sorting, limit=batch_size, pagination_rules=object_pagination, **kwargs
         )
 
-        if not records:
+        if not objects:
             break
 
-        for record in records:
-            yield record
+        for obj in objects:
+            yield obj
 
-        record_pagination = [
+        object_pagination = [
             # FIXME: support more than one-length sorting
-            [Filter(sorting[0].field, record[sorting[0].field], pagination_direction)]
+            [Filter(sorting[0].field, obj[sorting[0].field], pagination_direction)]
         ]

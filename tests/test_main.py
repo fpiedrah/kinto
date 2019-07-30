@@ -142,7 +142,7 @@ class TestMain(unittest.TestCase):
         assert "memory" in content
 
     def test_cli_migrate_command_runs_init_schema(self):
-        with mock.patch("kinto.__main__.scripts.migrate") as mocked_migrate:
+        with mock.patch("kinto.__main__.core_scripts.migrate") as mocked_migrate:
             res = main(
                 [
                     "init",
@@ -159,37 +159,8 @@ class TestMain(unittest.TestCase):
             assert res == 0
             assert mocked_migrate.call_count == 1
 
-    def test_cli_delete_collection_run_delete_collection_script(self):
-        with mock.patch("kinto.__main__.scripts.delete_collection") as del_col:
-            del_col.return_value = mock.sentinel.del_col_code
-            res = main(
-                [
-                    "init",
-                    "--ini",
-                    TEMP_KINTO_INI,
-                    "--backend",
-                    "memory",
-                    "--cache-backend",
-                    "memory",
-                ]
-            )
-            assert res == 0
-            res = main(
-                [
-                    "delete-collection",
-                    "--ini",
-                    TEMP_KINTO_INI,
-                    "--bucket",
-                    "test_bucket",
-                    "--collection",
-                    "test_collection",
-                ]
-            )
-            assert res == mock.sentinel.del_col_code
-            assert del_col.call_count == 1
-
     def test_cli_rebuild_quotas_run_rebuild_quotas_script(self):
-        with mock.patch("kinto.__main__.scripts.rebuild_quotas") as reb_quo:
+        with mock.patch("kinto.__main__.kinto_scripts.rebuild_quotas") as reb_quo:
             reb_quo.return_value = mock.sentinel.reb_quo_code
             res = main(
                 [
@@ -283,7 +254,9 @@ class TestMain(unittest.TestCase):
             assert "--reload" in mocked_pserve.call_args[1]["argv"]
 
     def test_cli_create_user_runs_account_script(self):
-        with mock.patch("kinto.__main__.create_user", return_value=0) as mocked_create_user:
+        with mock.patch(
+            "kinto.__main__.accounts_scripts.create_user", return_value=0
+        ) as mocked_create_user:
             res = main(
                 [
                     "init",
@@ -360,3 +333,14 @@ class TestMain(unittest.TestCase):
             mocked_logging.basicConfig.assert_called_with(
                 level=logging.INFO, format=DEFAULT_LOG_FORMAT
             )
+
+    def test_cli_flush_cache_command_runs_flush_cache_script(self):
+        # Build a temporary ini file.
+        res = main(
+            ["init", "--ini", TEMP_KINTO_INI, "--backend", "memory", "--cache-backend", "memory"]
+        )
+        assert res == 0
+        with mock.patch("kinto.__main__.core_scripts.flush_cache") as mocked_cache_script:
+            res = main(["flush-cache", "--ini", TEMP_KINTO_INI])
+            assert res == 0
+            assert mocked_cache_script.call_count == 1

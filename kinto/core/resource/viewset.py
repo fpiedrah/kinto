@@ -12,12 +12,11 @@ from .schema import (
     RequestSchema,
     PayloadRequestSchema,
     PatchHeaderSchema,
-    CollectionQuerySchema,
-    CollectionGetQuerySchema,
-    RecordGetQuerySchema,
-    RecordSchema,
+    PluralQuerySchema,
+    PluralGetQuerySchema,
+    ObjectGetQuerySchema,
+    ObjectSchema,
     ResourceReponses,
-    ShareableResourseResponses,
 )
 
 
@@ -55,11 +54,11 @@ class ViewSet:
     """
 
     service_name = "{resource_name}-{endpoint_type}"
-    collection_path = "/{resource_name}s"
-    record_path = "/{resource_name}s/{{id}}"
+    plural_path = "/{resource_name}s"
+    object_path = "/{resource_name}s/{{id}}"
 
-    collection_methods = ("GET", "POST", "DELETE")
-    record_methods = ("GET", "PUT", "PATCH", "DELETE")
+    plural_methods = ("HEAD", "GET", "POST", "DELETE")
+    object_methods = ("GET", "PUT", "PATCH", "DELETE")
 
     readonly_methods = ("GET", "OPTIONS", "HEAD")
 
@@ -67,10 +66,10 @@ class ViewSet:
 
     responses = ResourceReponses()
 
-    service_arguments = {"description": "Collection of {resource_name}"}
+    service_arguments = {"description": "Set of {resource_name}"}
 
     default_arguments = {
-        "permission": authorization.PRIVATE,
+        "permission": authorization.DYNAMIC,
         "accept": CONTENT_TYPES,
         "schema": RequestSchema(),
     }
@@ -84,14 +83,24 @@ class ViewSet:
         "schema": PayloadRequestSchema().bind(header=PatchHeaderSchema()),
     }
 
-    default_collection_arguments = {
-        "schema": RequestSchema().bind(querystring=CollectionQuerySchema())
-    }
-    collection_get_arguments = {
-        "schema": RequestSchema().bind(querystring=CollectionGetQuerySchema()),
+    default_plural_arguments = {"schema": RequestSchema().bind(querystring=PluralQuerySchema())}
+    plural_head_arguments = {
+        "schema": RequestSchema().bind(querystring=PluralGetQuerySchema()),
         "cors_headers": (
             "Next-Page",
-            "Total-Records",
+            "Last-Modified",
+            "ETag",
+            "Cache-Control",
+            "Expires",
+            "Pragma",
+            "Total-Objects",
+            "Total-Records",  # Deprecated.
+        ),
+    }
+    plural_get_arguments = {
+        "schema": RequestSchema().bind(querystring=PluralGetQuerySchema()),
+        "cors_headers": (
+            "Next-Page",
             "Last-Modified",
             "ETag",
             "Cache-Control",
@@ -99,17 +108,17 @@ class ViewSet:
             "Pragma",
         ),
     }
-    collection_post_arguments = {"schema": PayloadRequestSchema()}
-    default_record_arguments = {}
-    record_get_arguments = {
-        "schema": RequestSchema().bind(querystring=RecordGetQuerySchema()),
+    plural_post_arguments = {"schema": PayloadRequestSchema()}
+    default_object_arguments = {}
+    object_get_arguments = {
+        "schema": RequestSchema().bind(querystring=ObjectGetQuerySchema()),
         "cors_headers": ("Last-Modified", "ETag", "Cache-Control", "Expires", "Pragma"),
     }
 
     def __init__(self, **kwargs):
         self.update(**kwargs)
-        self.record_arguments = functools.partial(self.get_view_arguments, "record")
-        self.collection_arguments = functools.partial(self.get_view_arguments, "collection")
+        self.object_arguments = functools.partial(self.get_view_arguments, "object")
+        self.plural_arguments = functools.partial(self.get_view_arguments, "plural")
 
     def update(self, **kwargs):
         """Update viewset attributes with provided values."""
@@ -119,26 +128,26 @@ class ViewSet:
         """Return the Pyramid/Cornice view arguments for the given endpoint
         type and method.
 
-        :param str endpoint_type: either "collection" or "record".
+        :param str endpoint_type: either "plural" or "object".
         :param resource_cls: the resource class.
         :param str method: the HTTP method.
         """
         args = {**self.default_arguments}
-        default_arguments = getattr(self, "default_{}_arguments".format(endpoint_type))
+        default_arguments = getattr(self, f"default_{endpoint_type}_arguments")
         args.update(**default_arguments)
 
-        by_http_verb = "default_{}_arguments".format(method.lower())
+        by_http_verb = f"default_{method.lower()}_arguments"
         method_args = getattr(self, by_http_verb, {})
         args.update(**method_args)
 
-        by_method = "{}_{}_arguments".format(endpoint_type, method.lower())
+        by_method = f"{endpoint_type}_{method.lower()}_arguments"
         endpoint_args = getattr(self, by_method, {})
         args.update(**endpoint_args)
 
         request_schema = args.get("schema", RequestSchema())
-        record_schema = self.get_record_schema(resource_cls, method)
-        request_schema = request_schema.bind(body=record_schema)
-        response_schemas = self.responses.get_and_bind(endpoint_type, method, record=record_schema)
+        object_schema = self.get_object_schema(resource_cls, method)
+        request_schema = request_schema.bind(body=object_schema)
+        response_schemas = self.responses.get_and_bind(endpoint_type, method, object=object_schema)
 
         args["schema"] = request_schema
         args["response_schemas"] = response_schemas
@@ -149,32 +158,32 @@ class ViewSet:
 
         return args
 
-    def get_record_schema(self, resource_cls, method):
+    def get_object_schema(self, resource_cls, method):
         """Return the Cornice schema for the given method.
         """
         if method.lower() in ("patch", "delete"):
             resource_schema = SimpleSchema
         else:
             resource_schema = resource_cls.schema
-            if hasattr(resource_cls, "mapping"):
-                message = "Resource `mapping` is deprecated, use `schema`"
-                warnings.warn(message, DeprecationWarning)
-                resource_schema = resource_cls.mapping.__class__
 
-        record_schema = RecordSchema().bind(data=resource_schema())
+        permissions = PermissionsSchema(
+            name="permissions", missing=colander.drop, permissions=resource_cls.permissions
+        )
 
-        return record_schema
+        object_schema = ObjectSchema().bind(data=resource_schema(), permissions=permissions)
+
+        return object_schema
 
     def get_view(self, endpoint_type, method):
         """Return the view method name located on the resource object, for the
         given type and method.
 
-        * For collections, this will be "collection_{method|lower}
-        * For records, this will be "{method|lower}.
+        * For plural, this will be "plural_{method|lower}
+        * For objects, this will be "{method|lower}.
         """
-        if endpoint_type == "record":
+        if endpoint_type == "object":
             return method.lower()
-        return "{}_{}".format(endpoint_type, method.lower())
+        return f"{endpoint_type}_{method.lower()}"
 
     def get_name(self, resource_cls):
         """Returns the name of the resource.
@@ -200,7 +209,7 @@ class ViewSet:
         )
 
     def get_service_arguments(self):
-        return {**self.service_arguments}
+        return {**self.service_arguments, "factory": self.factory}
 
     def is_endpoint_enabled(self, endpoint_type, resource_name, method, settings):
         """Returns if the given endpoint is enabled or not.
@@ -212,37 +221,12 @@ class ViewSet:
         if readonly_enabled and not readonly_method:
             return False
 
-        setting_enabled = "{}_{}_{}_enabled".format(endpoint_type, resource_name, method.lower())
+        setting_enabled = f"{endpoint_type}_{resource_name}_{method.lower()}_enabled"
         return asbool(settings.get(setting_enabled, True))
 
 
 class ShareableViewSet(ViewSet):
-    """A ShareableViewSet will register the given resource with a schema
-    that supports permissions.
-
-    The views will rely on dynamic permissions (e.g. create with PUT if
-    record does not exist), and solicit the cliquet RouteFactory.
-    """
-
-    responses = ShareableResourseResponses()
-
-    def get_record_schema(self, resource_cls, method):
-        """Return the Cornice schema for the given method.
-        """
-        record_schema = super(ShareableViewSet, self).get_record_schema(resource_cls, method)
-        allowed_permissions = resource_cls.permissions
-        permissions = PermissionsSchema(
-            name="permissions", missing=colander.drop, permissions=allowed_permissions
-        )
-        record_schema = record_schema.bind(permissions=permissions)
-        return record_schema
-
-    def get_view_arguments(self, endpoint_type, resource_cls, method):
-        args = super().get_view_arguments(endpoint_type, resource_cls, method)
-        args["permission"] = authorization.DYNAMIC
-        return args
-
-    def get_service_arguments(self):
-        args = super().get_service_arguments()
-        args["factory"] = self.factory
-        return args
+    def __init__(self, *args, **kwargs):
+        message = "`ShareableViewSet` is deprecated, use `ViewSet` instead."
+        warnings.warn(message, DeprecationWarning)
+        super().__init__(*args, **kwargs)

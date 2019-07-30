@@ -2,7 +2,7 @@ import copy
 
 from pyramid.httpexceptions import HTTPInsufficientStorage
 from kinto.core.errors import http_error, ERRORS
-from kinto.core.storage.exceptions import RecordNotFoundError
+from kinto.core.storage.exceptions import ObjectNotFoundError
 from kinto.core.utils import instance_uri
 
 from .utils import record_size
@@ -20,21 +20,21 @@ def raise_insufficient_storage(message):
 def get_bucket_settings(settings, bucket_id, name):
     return settings.get(
         # Bucket specific
-        "quotas.bucket_{}_{}".format(bucket_id, name),
+        f"quotas.bucket_{bucket_id}_{name}",
         # Global to all buckets
-        settings.get("quotas.bucket_{}".format(name), None),
+        settings.get(f"quotas.bucket_{name}", None),
     )
 
 
 def get_collection_settings(settings, bucket_id, collection_id, name):
     return settings.get(
         # Specific for a given bucket collection
-        "quotas.collection_{}_{}_{}".format(bucket_id, collection_id, name),
+        f"quotas.collection_{bucket_id}_{collection_id}_{name}",
         # Specific to given bucket collections
         settings.get(
-            "quotas.collection_{}_{}".format(bucket_id, name),
+            f"quotas.collection_{bucket_id}_{name}",
             # Global to all buckets collections
-            settings.get("quotas.collection_{}".format(name), None),
+            settings.get(f"quotas.collection_{name}", None),
         ),
     )
 
@@ -82,7 +82,7 @@ def on_resource_changed(event):
     storage = event.request.registry.storage
 
     targets = []
-    for impacted in event.impacted_records:
+    for impacted in event.impacted_objects:
         target = impacted["new" if action != "delete" else "old"]
         # On POST .../records, the URI does not contain the newly created
         # record id.
@@ -104,11 +104,11 @@ def on_resource_changed(event):
         bucket_info = copy.deepcopy(
             storage.get(
                 parent_id=bucket_uri,
-                collection_id=QUOTA_RESOURCE_NAME,
+                resource_name=QUOTA_RESOURCE_NAME,
                 object_id=BUCKET_QUOTA_OBJECT_ID,
             )
         )
-    except RecordNotFoundError:
+    except ObjectNotFoundError:
         bucket_info = {"collection_count": 0, "record_count": 0, "storage_size": 0}
 
     collection_info = {"record_count": 0, "storage_size": 0}
@@ -117,11 +117,11 @@ def on_resource_changed(event):
             collection_info = copy.deepcopy(
                 storage.get(
                     parent_id=collection_uri,
-                    collection_id=QUOTA_RESOURCE_NAME,
+                    resource_name=QUOTA_RESOURCE_NAME,
                     object_id=COLLECTION_QUOTA_OBJECT_ID,
                 )
             )
-        except RecordNotFoundError:
+        except ObjectNotFoundError:
             pass
 
     # Update the bucket quotas values for each impacted record.
@@ -131,9 +131,7 @@ def on_resource_changed(event):
 
         if max_bytes_per_item is not None and action != "delete":
             if new_size > max_bytes_per_item:
-                message = "Maximum bytes per object exceeded " "({} > {} Bytes.".format(
-                    new_size, max_bytes_per_item
-                )
+                message = f'Maximum bytes per object exceeded " "({new_size} > {max_bytes_per_item} Bytes.'
                 raise_insufficient_storage(message)
 
         if action == "create":
@@ -158,8 +156,8 @@ def on_resource_changed(event):
                 bucket_info["collection_count"] -= 1
                 # When we delete the collection all the records in it
                 # are deleted without notification.
-                collection_records, _ = storage.get_all(
-                    collection_id="record", parent_id=collection_uri
+                collection_records = storage.list_all(
+                    resource_name="record", parent_id=collection_uri
                 )
                 for r in collection_records:
                     old_record_size = record_size(r)
@@ -176,37 +174,41 @@ def on_resource_changed(event):
 
     if bucket_max_bytes is not None:
         if bucket_info["storage_size"] > bucket_max_bytes:
-            message = "Bucket maximum total size exceeded " "({} > {} Bytes). ".format(
-                bucket_info["storage_size"], bucket_max_bytes
+            message = (
+                "Bucket maximum total size exceeded "
+                f"({bucket_info['storage_size']} > {bucket_max_bytes} Bytes). "
             )
             raise_insufficient_storage(message)
 
     if bucket_max_items is not None:
         if bucket_info["record_count"] > bucket_max_items:
-            message = "Bucket maximum number of objects exceeded " "({} > {} objects).".format(
-                bucket_info["record_count"], bucket_max_items
+            message = (
+                "Bucket maximum number of objects exceeded "
+                f"({bucket_info['record_count']} > {bucket_max_items} objects)."
             )
             raise_insufficient_storage(message)
 
     if collection_max_bytes is not None:
         if collection_info["storage_size"] > collection_max_bytes:
-            message = "Collection maximum size exceeded " "({} > {} Bytes).".format(
-                collection_info["storage_size"], collection_max_bytes
+            message = (
+                "Collection maximum size exceeded "
+                f"({collection_info['storage_size']} > {collection_max_bytes} Bytes)."
             )
             raise_insufficient_storage(message)
 
     if collection_max_items is not None:
         if collection_info["record_count"] > collection_max_items:
-            message = "Collection maximum number of objects exceeded " "({} > {} objects).".format(
-                collection_info["record_count"], collection_max_items
+            message = (
+                "Collection maximum number of objects exceeded "
+                f"({collection_info['record_count']} > {collection_max_items} objects)."
             )
             raise_insufficient_storage(message)
 
     storage.update(
         parent_id=bucket_uri,
-        collection_id=QUOTA_RESOURCE_NAME,
+        resource_name=QUOTA_RESOURCE_NAME,
         object_id=BUCKET_QUOTA_OBJECT_ID,
-        record=bucket_info,
+        obj=bucket_info,
     )
 
     if collection_id:
@@ -217,7 +219,7 @@ def on_resource_changed(event):
         else:
             storage.update(
                 parent_id=collection_uri,
-                collection_id=QUOTA_RESOURCE_NAME,
+                resource_name=QUOTA_RESOURCE_NAME,
                 object_id=COLLECTION_QUOTA_OBJECT_ID,
-                record=collection_info,
+                obj=collection_info,
             )

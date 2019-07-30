@@ -311,7 +311,7 @@ def prefixed_userid(request):
     # (see :func:`kinto.core.initialization.setup_authentication`)
     authn_type = getattr(request, "authn_type", None)
     if authn_type is not None:
-        return "{}:{}".format(authn_type, request.selected_userid)
+        return f"{authn_type}:{request.selected_userid}"
 
 
 def prefixed_principals(request):
@@ -460,7 +460,7 @@ def view_lookup_registry(registry, uri):
     :rtype: tuple
     :returns: the resource name and the associated matchdict.
     """
-    api_prefix = "/{}".format(registry.route_prefix)
+    api_prefix = f"/{registry.route_prefix}"
     path = api_prefix + uri
 
     q = registry.queryUtility
@@ -472,13 +472,13 @@ def view_lookup_registry(registry, uri):
     if route is None:
         raise ValueError("URI has no route")
 
-    resource_name = route.name.replace("-record", "").replace("-collection", "")
+    resource_name = route.name.replace("-object", "").replace("-plural", "")
     return resource_name, matchdict
 
 
 def instance_uri(request, resource_name, **params):
     """Return the URI for the given resource."""
-    return strip_uri_prefix(request.route_path("{}-record".format(resource_name), **params))
+    return strip_uri_prefix(request.route_path(f"{resource_name}-object", **params))
 
 
 def instance_uri_registry(registry, resource_name, **params):
@@ -492,45 +492,17 @@ def instance_uri_registry(registry, resource_name, **params):
     return instance_uri(request, resource_name, **params)
 
 
-def parse_resource(resource):
-    """Extract the bucket_id and collection_id of the given resource (URI)
-
-    :param str resource: a uri formatted /buckets/<bid>/collections/<cid> or <bid>/<cid>.
-    :returns: a dictionary with the bucket_id and collection_id of the resource
-    """
-
-    error_msg = "Resources should be defined as "
-    "'/buckets/<bid>/collections/<cid>' or '<bid>/<cid>'. "
-    "with valid collection and bucket ids."
-
-    from kinto.views import NameGenerator
-
-    id_generator = NameGenerator()
-    parts = resource.split("/")
-    if len(parts) == 2:
-        bucket, collection = parts
-    elif len(parts) == 5:
-        _, _, bucket, _, collection = parts
-    else:
-        raise ValueError(error_msg)
-    if bucket == "" or collection == "":
-        raise ValueError(error_msg)
-    if not id_generator.match(bucket) or not id_generator.match(collection):
-        raise ValueError(error_msg)
-    return {"bucket": bucket, "collection": collection}
-
-
-def apply_json_patch(record, ops):
+def apply_json_patch(obj, ops):
     """
     Apply JSON Patch operations using jsonpatch.
 
-    :param record: base record where changes should be applied (not in-place).
+    :param object: base object where changes should be applied (not in-place).
     :param list changes: list of JSON patch operations.
     :param bool only_data: param to limit the scope of the patch only to 'data'.
-    :returns dict data: patched record data.
-             dict permissions: patched record permissions
+    :returns dict data: patched object data.
+             dict permissions: patched object permissions
     """
-    data = {**record}
+    data = {**obj}
 
     # Permissions should always have read and write fields defined (to allow add)
     permissions = {"read": set(), "write": set()}

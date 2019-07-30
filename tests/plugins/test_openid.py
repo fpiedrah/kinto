@@ -90,6 +90,21 @@ class OpenIDOnePolicyTest(support.BaseWebTest, unittest.TestCase):
         providers = capabilities["openid"]["providers"]
         assert len(providers) == 1
 
+    def test_profile_is_exposed(self):
+        key = "openid:verify:444c6694937007bbf494f155f6cb12139db4c4c6a926742f3fe0bb4b5d191aa3"
+        profile = {"sub": "abcd", "email": "foobar@tld.com"}
+        self.app.app.registry.cache.set(key, profile, ttl=30)
+        with mock.patch("kinto.plugins.openid.utils.requests.get") as m:
+            m.return_value.json.return_value = {
+                "userinfo_endpoint": "http://uinfo",
+                "jwks_uri": "https://jwks",
+            }
+            fetch_openid_config("https://fxa")
+
+        resp = self.app.get("/", headers={"Authorization": "Bearer avrbnnbrbr"})
+        assert "profile" in resp.json["user"]
+        assert resp.json["user"]["profile"] == {"sub": "abcd", "email": "foobar@tld.com"}
+
 
 class HelloViewTest(OpenIDWebTest):
     def test_openid_capability_if_enabled(self):
@@ -230,7 +245,7 @@ class LoginViewTest(OpenIDWebTest):
 
     def test_returns_400_if_email_is_not_in_scope_when_userid_field_is_email(self):
         scope = "openid"
-        cb = "http://ui"
+        cb = "http://ui.kinto.example.com"
         self.app.get("/openid/auth0/login", params={"callback": cb, "scope": scope}, status=307)
         # See config above (email is userid field)
         self.app.get("/openid/google/login", params={"callback": cb, "scope": scope}, status=400)
@@ -245,7 +260,7 @@ class LoginViewTest(OpenIDWebTest):
         )
 
     def test_redirects_to_the_identity_provider(self):
-        params = {"callback": "http://ui", "scope": "openid"}
+        params = {"callback": "http://ui.kinto.example.com", "scope": "openid"}
         resp = self.app.get("/openid/auth0/login", params=params, status=307)
         location = resp.headers["Location"]
         assert "auth0.com/authorize?" in location
@@ -254,7 +269,7 @@ class LoginViewTest(OpenIDWebTest):
         assert "client_id=abc" in location
 
     def test_redirects_to_the_identity_provider_with_prompt_none(self):
-        params = {"callback": "http://ui", "scope": "openid", "prompt": "none"}
+        params = {"callback": "http://ui.kinto.example.com", "scope": "openid", "prompt": "none"}
         resp = self.app.get("/openid/auth0/login", params=params, status=307)
         location = resp.headers["Location"]
         assert "auth0.com/authorize?" in location
@@ -264,13 +279,13 @@ class LoginViewTest(OpenIDWebTest):
         assert "prompt=none" in location
 
     def test_callback_is_stored_in_cache(self):
-        params = {"callback": "http://ui", "scope": "openid"}
+        params = {"callback": "http://ui.kinto.example.com", "scope": "openid"}
         with mock.patch("kinto.plugins.openid.views.random_bytes_hex") as m:
             m.return_value = "key"
             self.app.get("/openid/auth0/login", params=params, status=307)
 
         cached = self.app.app.registry.cache.get("openid:state:key")
-        assert cached == "http://ui"
+        assert cached == "http://ui.kinto.example.com"
 
 
 class TokenViewTest(OpenIDWebTest):
@@ -296,7 +311,7 @@ class TokenViewTest(OpenIDWebTest):
                     "code": "abc",
                     "client_id": "abc",
                     "client_secret": "xyz",
-                    "redirect_uri": "http://localhost/v1/openid/auth0/token?",
+                    "redirect_uri": "http://localhost/v1/openid/auth0/token",
                     "grant_type": "authorization_code",
                 },
             )
@@ -316,4 +331,4 @@ class TokenViewTest(OpenIDWebTest):
                 "/openid/auth0/token", params={"code": "abc", "state": "key"}, status=307
             )
         location = resp.headers["Location"]
-        assert location == "http://ui/#token=%7B%22access_token%22%3A%20%22token%22%7D"
+        assert location == "http://ui/#token=eyJhY2Nlc3NfdG9rZW4iOiAidG9rZW4ifQ%3D%3D"

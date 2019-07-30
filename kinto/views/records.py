@@ -17,10 +17,10 @@ _parent_path = "/buckets/{{bucket_id}}/collections/{{collection_id}}"
 
 @resource.register(
     name="record",
-    collection_path=_parent_path + "/records",
-    record_path=_parent_path + "/records/{{id}}",
+    plural_path=_parent_path + "/records",
+    object_path=_parent_path + "/records/{{id}}",
 )
-class Record(resource.ShareableResource):
+class Record(resource.Resource):
 
     schema_field = "schema"
 
@@ -34,7 +34,7 @@ class Record(resource.ShareableResource):
             bucket_uri = utils.instance_uri(request, "bucket", id=self.bucket_id)
             collection = object_exists_or_404(
                 request,
-                collection_id="collection",
+                resource_name="collection",
                 parent_id=bucket_uri,
                 object_id=self.collection_id,
             )
@@ -50,9 +50,9 @@ class Record(resource.ShareableResource):
             request, "collection", bucket_id=self.bucket_id, id=self.collection_id
         )
 
-    def process_record(self, new, old=None):
+    def process_object(self, new, old=None):
         """Validate records against collection or bucket schema, if any."""
-        new = super().process_record(new, old)
+        new = super().process_object(new, old)
 
         # Is schema validation enabled?
         settings = self.request.registry.settings
@@ -61,8 +61,7 @@ class Record(resource.ShareableResource):
             return new
 
         # Remove internal and auto-assigned fields from schemas and record.
-        internal_fields = (
-            self.model.id_field,
+        ignored_fields = (
             self.model.modified_field,
             self.schema_field,
             self.model.permissions_field,
@@ -71,9 +70,10 @@ class Record(resource.ShareableResource):
         # The schema defined on the collection will be validated first.
         if "schema" in self._collection:
             schema = self._collection["schema"]
-
             try:
-                validate_schema(new, schema, ignore_fields=internal_fields)
+                validate_schema(
+                    new, schema, ignore_fields=ignored_fields, id_field=self.model.id_field
+                )
             except ValidationError as e:
                 raise_invalid(self.request, name=e.field, description=e.message)
             except RefResolutionError as e:
@@ -85,13 +85,17 @@ class Record(resource.ShareableResource):
 
         # Validate also from the record:schema field defined on the bucket.
         validate_from_bucket_schema_or_400(
-            new, resource_name="record", request=self.request, ignore_fields=internal_fields
+            new,
+            resource_name="record",
+            request=self.request,
+            ignore_fields=ignored_fields,
+            id_field=self.model.id_field,
         )
 
         return new
 
-    def collection_get(self):
-        result = super().collection_get()
+    def plural_get(self):
+        result = super().plural_get()
         self._handle_cache_expires(self.request.response)
         return result
 
@@ -115,14 +119,12 @@ class Record(resource.ShareableResource):
 
         cache_expires = self._collection.get("cache_expires")
         if cache_expires is None:
-            by_collection = "{}.{}.record_cache_expires_seconds".format(
-                self.bucket_id, self.collection_id
+            by_collection = f"{self.bucket_id}.{self.collection_id}.record_cache_expires_seconds"
+            by_bucket = f"{self.bucket_id}.record_cache_expires_seconds"
+            by_collection_legacy = (
+                f"{self.bucket_id}_{self.collection_id}_record_cache_expires_seconds"
             )
-            by_bucket = "{}.record_cache_expires_seconds".format(self.bucket_id)
-            by_collection_legacy = "{}_{}_record_cache_expires_seconds".format(
-                self.bucket_id, self.collection_id
-            )
-            by_bucket_legacy = "{}_record_cache_expires_seconds".format(self.bucket_id)
+            by_bucket_legacy = f"{self.bucket_id}_record_cache_expires_seconds"
             settings = self.request.registry.settings
             for s in (by_collection, by_bucket, by_collection_legacy, by_bucket_legacy):
                 cache_expires = settings.get(s)

@@ -96,7 +96,7 @@ def http_error(
     :param error: string description of error type (e.g. "Bad request")
     :param message: context information (e.g. "Invalid request parameters")
     :param info: information about error (e.g. URL to troubleshooting)
-    :param details: additional structured details (conflicting record)
+    :param details: additional structured details (conflicting object)
     :returns: the formatted response object
     :rtype: pyramid.httpexceptions.HTTPException
     """
@@ -148,7 +148,7 @@ def json_error_handler(request):
         description = error["description"].decode("utf-8")
 
     if name is not None:
-        if name in description:
+        if str(name) in description:
             message = description
         else:
             message = "{name} in {location}: {description}".format_map(error)
@@ -204,7 +204,7 @@ def request_GET(request):
     except UnicodeDecodeError:
         querystring = request.environ.get("QUERY_STRING", "")
         logger = logging.getLogger(__name__)
-        logger.warn("Error decoding QUERY_STRING: %s" % request.environ)
+        logger.warning("Error decoding QUERY_STRING: %s" % request.environ)
         raise http_error(
             httpexceptions.HTTPBadRequest(),
             errno=ERRORS.INVALID_PARAMETERS,

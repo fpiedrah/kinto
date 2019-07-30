@@ -2,6 +2,7 @@ from unittest import mock
 
 import pytest
 
+from kinto.core import DEFAULT_SETTINGS
 from kinto.core.utils import COMPARISON, sqlalchemy
 from kinto.core.storage import generators, memory, postgresql, exceptions, StorageBase
 from kinto.core.storage import Filter, Sort, MISSING
@@ -55,14 +56,15 @@ class StorageBaseTest(unittest.TestCase):
         calls = [
             (self.storage.initialize_schema,),
             (self.storage.flush,),
-            (self.storage.collection_timestamp, "", ""),
+            (self.storage.resource_timestamp, "", ""),
             (self.storage.create, "", "", {}),
             (self.storage.get, "", "", ""),
             (self.storage.update, "", "", "", {}),
             (self.storage.delete, "", "", ""),
             (self.storage.delete_all, "", ""),
             (self.storage.purge_deleted, "", ""),
-            (self.storage.get_all, "", ""),
+            (self.storage.list_all, "", ""),
+            (self.storage.count_all, "", ""),
         ]
         for call in calls:
             self.assertRaises(NotImplementedError, *call)
@@ -80,7 +82,7 @@ class MemoryBasedStorageTest(unittest.TestCase):
     def test_backend_raise_not_implemented_error(self):
         storage = memory.MemoryBasedStorage()
         with pytest.raises(NotImplementedError):
-            storage.bump_and_store_timestamp("record", "/buckets/foo/collections/bar")
+            storage.bump_and_store_timestamp("object", "/school/foo/students/bar")
 
 
 class MemoryStorageTest(StorageTest, unittest.TestCase):
@@ -117,16 +119,16 @@ class LenientMemoryStorageTest(MemoryStorageTest):
     def test_create_bytes_raises(self):
         data = {"steak": "haché".encode(encoding="utf-8")}
         self.assertIsInstance(data["steak"], bytes)
-        self.assertIsNotNone(self.create_record(data))
+        self.assertIsNotNone(self.create_object(data))
 
     def test_update_bytes_raises(self):
-        record = self.create_record()
+        obj = self.create_object()
 
-        new_record = {"steak": "haché".encode(encoding="utf-8")}
-        self.assertIsInstance(new_record["steak"], bytes)
+        new_object = {"steak": "haché".encode(encoding="utf-8")}
+        self.assertIsInstance(new_object["steak"], bytes)
 
         self.assertIsNotNone(
-            self.storage.update(object_id=record["id"], record=new_record, **self.storage_kw)
+            self.storage.update(object_id=obj["id"], obj=new_object, **self.storage_kw)
         )
 
 
@@ -137,7 +139,7 @@ class PostgreSQLStorageTest(StorageTest, unittest.TestCase):
         "storage_max_fetch_size": 10000,
         "storage_backend": "kinto.core.storage.postgresql",
         "storage_poolclass": "sqlalchemy.pool.StaticPool",
-        "storage_url": "postgres://postgres:postgres@localhost:5432/testdb",
+        "storage_url": "postgresql://postgres:postgres@localhost:5432/testdb",
         "storage_strict_json": True,
     }
 
@@ -147,50 +149,52 @@ class PostgreSQLStorageTest(StorageTest, unittest.TestCase):
             self.storage.client, "session_factory", side_effect=sqlalchemy.exc.SQLAlchemyError
         )
 
-    def test_number_of_fetched_records_can_be_limited_in_settings(self):
+    def test_number_of_fetched_objects_can_be_limited_in_settings(self):
         for i in range(4):
-            self.create_record({"phone": "tel-{}".format(i)})
+            self.create_object({"phone": "tel-{}".format(i)})
 
-        results, count = self.storage.get_all(**self.storage_kw)
+        results = self.storage.list_all(**self.storage_kw)
         self.assertEqual(len(results), 4)
 
         settings = {**self.settings, "storage_max_fetch_size": 2}
         config = self._get_config(settings=settings)
         limited = self.backend.load_from_config(config)
 
-        results, count = limited.get_all(**self.storage_kw)
-        self.assertEqual(count, 4)
+        results = limited.list_all(**self.storage_kw)
         self.assertEqual(len(results), 2)
+        count = limited.count_all(**self.storage_kw)
+        self.assertEqual(count, 4)
 
-    def test_number_of_fetched_records_is_per_page(self):
+    def test_number_of_fetched_objects_is_per_page(self):
         for i in range(10):
-            self.create_record({"number": i})
+            self.create_object({"number": i})
 
         settings = {**self.settings, "storage_max_fetch_size": 2}
         config = self._get_config(settings=settings)
         backend = self.backend.load_from_config(config)
 
-        results, count = backend.get_all(
+        results = backend.list_all(
             pagination_rules=[[Filter("number", 1, COMPARISON.GT)]], **self.storage_kw
         )
-        self.assertEqual(count, 10)
         self.assertEqual(len(results), 2)
+        count = backend.count_all(**self.storage_kw)
+        self.assertEqual(count, 10)
 
     def test_connection_is_rolledback_if_error_occurs(self):
         with self.storage.client.connect() as conn:
-            query = "DELETE FROM records WHERE collection_id = 'genre';"
+            query = "DELETE FROM objects WHERE resource_name = 'genre';"
             conn.execute(query)
 
         try:
             with self.storage.client.connect() as conn:
                 query = """
-                INSERT INTO records VALUES ('rock-and-roll', 'music', 'genre', NOW(), '{}', FALSE);
+                INSERT INTO objects VALUES ('rock-and-roll', 'music', 'genre', NOW(), '{}', FALSE);
                 """
                 conn.execute(query)
                 conn.commit()
 
                 query = """
-                INSERT INTO records VALUES ('jazz', 'music', 'genre', NOW(), '{}', FALSE);
+                INSERT INTO objects VALUES ('jazz', 'music', 'genre', NOW(), '{}', FALSE);
                 """
                 conn.execute(query)
 
@@ -199,7 +203,7 @@ class PostgreSQLStorageTest(StorageTest, unittest.TestCase):
             pass
 
         with self.storage.client.connect() as conn:
-            query = "SELECT COUNT(*) FROM records WHERE collection_id = 'genre';"
+            query = "SELECT COUNT(*) FROM objects WHERE resource_name = 'genre';"
             result = conn.execute(query)
             self.assertEqual(result.fetchone()[0], 1)
 
@@ -217,12 +221,10 @@ class PostgreSQLStorageTest(StorageTest, unittest.TestCase):
             self.backend.load_from_config(self._get_config(settings=settings))
             mocked.assert_any_call(msg)
 
-    def test_get_all_raises_if_missing_on_strange_query(self):
+    def test_list_all_raises_if_missing_on_strange_query(self):
         with self.assertRaises(ValueError):
-            self.storage.get_all(
-                "some-collection",
-                "some-parent",
-                filters=[Filter("author", MISSING, COMPARISON.HAS)],
+            self.storage.list_all(
+                "some-resource", "some-parent", filters=[Filter("author", MISSING, COMPARISON.HAS)]
             )
 
     def test_integrity_error_rollsback_transaction(self):
@@ -234,7 +236,7 @@ class PostgreSQLStorageTest(StorageTest, unittest.TestCase):
                 # Make some change in a table.
                 conn.execute(
                     """
-                INSERT INTO records
+                INSERT INTO objects
                 VALUES ('rock-and-roll', 'music', 'genre', NOW(), '{}', FALSE);
                 """
                 )
@@ -249,9 +251,9 @@ class PostgreSQLStorageTest(StorageTest, unittest.TestCase):
         with client.connect() as conn:
             result = conn.execute(
                 """
-            SELECT FROM records
+            SELECT FROM objects
              WHERE parent_id = 'music'
-               AND collection_id = 'genre';
+               AND resource_name = 'genre';
             """
             )
         self.assertEqual(result.rowcount, 0)
@@ -259,74 +261,83 @@ class PostgreSQLStorageTest(StorageTest, unittest.TestCase):
     def test_conflicts_handled_correctly(self):
         config = self._get_config()
         storage = self.backend.load_from_config(config)
-        storage.create(collection_id="genre", parent_id="music", record={"id": "rock-and-roll"})
+        storage.create(resource_name="genre", parent_id="music", obj={"id": "rock-and-roll"})
 
-        def record_not_found(*args, **kwargs):
-            raise exceptions.RecordNotFoundError()
+        def object_not_found(*args, **kwargs):
+            raise exceptions.ObjectNotFoundError()
 
-        with mock.patch.object(storage, "get", side_effect=record_not_found):
+        with mock.patch.object(storage, "get", side_effect=object_not_found):
             with self.assertRaises(exceptions.UnicityError):
                 storage.create(
-                    collection_id="genre", parent_id="music", record={"id": "rock-and-roll"}
+                    resource_name="genre", parent_id="music", obj={"id": "rock-and-roll"}
                 )
+
+    def test_supports_null_pool(self):
+        settings = {
+            **DEFAULT_SETTINGS,
+            **self.settings,
+            "storage_poolclass": "sqlalchemy.pool.NullPool",
+        }
+        config = self._get_config(settings=settings)
+        self.backend.load_from_config(config)  # does not raise
 
 
 class PaginatedTest(unittest.TestCase):
     def setUp(self):
         self.storage = mock.Mock()
-        self.sample_records = [
-            {"id": "record-01", "flavor": "strawberry"},
-            {"id": "record-02", "flavor": "banana"},
-            {"id": "record-03", "flavor": "mint"},
-            {"id": "record-04", "flavor": "plain"},
-            {"id": "record-05", "flavor": "peanut"},
+        self.sample_objects = [
+            {"id": "object-01", "flavor": "strawberry"},
+            {"id": "object-02", "flavor": "banana"},
+            {"id": "object-03", "flavor": "mint"},
+            {"id": "object-04", "flavor": "plain"},
+            {"id": "object-05", "flavor": "peanut"},
         ]
 
-        def sample_records_side_effect(*args, **kwargs):
-            return (self.sample_records, len(self.sample_records))
+        def sample_objects_side_effect(*args, **kwargs):
+            return self.sample_objects
 
-        self.storage.get_all.side_effect = sample_records_side_effect
+        self.storage.list_all.side_effect = sample_objects_side_effect
 
     def test_paginated_passes_sort(self):
         i = paginated(self.storage, sorting=[Sort("id", -1)])
         next(i)  # make the generator do anything
-        self.storage.get_all.assert_called_with(
+        self.storage.list_all.assert_called_with(
             sorting=[Sort("id", -1)], limit=25, pagination_rules=None
         )
 
     def test_paginated_passes_batch_size(self):
         i = paginated(self.storage, sorting=[Sort("id", -1)], batch_size=17)
         next(i)  # make the generator do anything
-        self.storage.get_all.assert_called_with(
+        self.storage.list_all.assert_called_with(
             sorting=[Sort("id", -1)], limit=17, pagination_rules=None
         )
 
-    def test_paginated_yields_records(self):
+    def test_paginated_yields_objects(self):
         iter = paginated(self.storage, sorting=[Sort("id", -1)])
-        assert next(iter) == {"id": "record-01", "flavor": "strawberry"}
+        assert next(iter) == {"id": "object-01", "flavor": "strawberry"}
 
     def test_paginated_fetches_next_page(self):
-        records = self.sample_records
-        records.reverse()
+        objects = self.sample_objects
+        objects.reverse()
 
-        def get_all_mock(*args, **kwargs):
-            this_records = records[:3]
-            del records[:3]
-            return this_records, len(this_records)
+        def list_all_mock(*args, **kwargs):
+            this_objects = objects[:3]
+            del objects[:3]
+            return this_objects
 
-        self.storage.get_all.side_effect = get_all_mock
+        self.storage.list_all.side_effect = list_all_mock
 
         list(paginated(self.storage, sorting=[Sort("id", -1)]))
-        assert self.storage.get_all.call_args_list == [
+        assert self.storage.list_all.call_args_list == [
             mock.call(sorting=[Sort("id", -1)], limit=25, pagination_rules=None),
             mock.call(
                 sorting=[Sort("id", -1)],
                 limit=25,
-                pagination_rules=[[Filter("id", "record-03", COMPARISON.LT)]],
+                pagination_rules=[[Filter("id", "object-03", COMPARISON.LT)]],
             ),
             mock.call(
                 sorting=[Sort("id", -1)],
                 limit=25,
-                pagination_rules=[[Filter("id", "record-01", COMPARISON.LT)]],
+                pagination_rules=[[Filter("id", "object-01", COMPARISON.LT)]],
             ),
         ]

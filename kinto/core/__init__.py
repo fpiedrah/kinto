@@ -38,7 +38,6 @@ DEFAULT_SETTINGS = {
     "cache_backend": "",
     "cache_hosts": "",
     "cache_url": "",
-    "cache_pool_size": 25,
     "cache_prefix": "",
     "cache_max_size_bytes": 524288,
     "cors_origins": "*",
@@ -75,7 +74,6 @@ DEFAULT_SETTINGS = {
     "pagination_token_validity_seconds": 10 * 60,
     "permission_backend": "",
     "permission_url": "",
-    "permission_pool_size": 25,
     "profiler_dir": tempfile.gettempdir(),
     "profiler_enabled": False,
     "project_docs": "",
@@ -90,7 +88,6 @@ DEFAULT_SETTINGS = {
     "storage_backend": "",
     "storage_url": "",
     "storage_max_fetch_size": 10000,
-    "storage_pool_size": 25,
     "tm.annotate_user": False,  # Do annotate transactions with the user-id.
     "transaction_per_request": True,
     "userid_hmac_secret": "",
@@ -143,7 +140,10 @@ class JsonLogFormatter(dockerflow_logging.JsonLogFormatter):
 
 def get_user_info(request):
     # Default user info (shown in hello view for example).
-    return {"id": request.prefixed_userid, "principals": request.prefixed_principals}
+    user_info = {"id": request.prefixed_userid, "principals": request.prefixed_principals}
+    if hasattr(request, "get_user_profile"):
+        user_info["profile"] = request.get_user_profile()
+    return user_info
 
 
 def includeme(config):

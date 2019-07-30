@@ -2,6 +2,7 @@ import codecs
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from time import strftime
 from unittest import mock
 
@@ -10,6 +11,29 @@ from kinto import __version__
 
 
 class ConfigTest(unittest.TestCase):
+    def _assertTimestampStringsAlmostEqual(self, s1, s2, delta=timedelta(seconds=1)):
+        """Assert that two timestamp strings are almost equal, within a
+        specified timedelta.
+
+        :param s1: a string representing a timestamp with the format
+            format %a, %d %b %Y %H:%M:%S %z
+        :param s2: a string representing a timestamp with the format
+            format %a, %d %b %Y %H:%M:%S %z
+        :param delta: timedelta, default is 1 second
+        :returns: True, if time between s1 and s2 is less than delta.
+            False, otherwise.
+
+        """
+        s1 = datetime.strptime(s1, "%a, %d %b %Y %H:%M:%S %z")
+        s2 = datetime.strptime(s2, "%a, %d %b %Y %H:%M:%S %z")
+
+        return self.assertLessEqual(
+            abs(s1 - s2),
+            delta,
+            f"Delta between {s1} and {s2} is {s1 - s2}. Expected difference "
+            f"to be less than or equal to {delta}",
+        )
+
     def test_transpose_parameters_into_template(self):
         self.maxDiff = None
         template = "kinto.tpl"
@@ -66,12 +90,13 @@ class ConfigTest(unittest.TestCase):
 
     @mock.patch("kinto.config.render_template")
     def test_init_postgresql_values(self, mocked_render_template):
+        self.maxDiff = None
         config.init("kinto.ini", backend="postgresql", cache_backend="postgresql")
 
         args, kwargs = list(mocked_render_template.call_args)
         self.assertEqual(args, ("kinto.tpl", "kinto.ini"))
 
-        postgresql_url = "postgres://postgres:postgres@localhost/postgres"
+        postgresql_url = "postgresql://postgres:postgres@localhost/postgres"
         self.assertDictEqual(
             kwargs,
             {
@@ -84,8 +109,13 @@ class ConfigTest(unittest.TestCase):
                 "cache_url": postgresql_url,
                 "permission_url": postgresql_url,
                 "kinto_version": __version__,
-                "config_file_timestamp": strftime("%a, %d %b %Y %H:%M:%S %z"),
+                "config_file_timestamp": mock.ANY,
             },
+        )
+
+        self._assertTimestampStringsAlmostEqual(
+            strftime("%a, %d %b %Y %H:%M:%S %z"),  # expected
+            kwargs["config_file_timestamp"],  # actual
         )
 
     @mock.patch("kinto.config.render_template")
@@ -95,7 +125,7 @@ class ConfigTest(unittest.TestCase):
         args, kwargs = list(mocked_render_template.call_args)
         self.assertEqual(args, ("kinto.tpl", "kinto.ini"))
 
-        postgresql_url = "postgres://postgres:postgres@localhost/postgres"
+        postgresql_url = "postgresql://postgres:postgres@localhost/postgres"
         cache_url = "127.0.0.1:11211 127.0.0.2:11211"
         self.assertDictEqual(
             kwargs,
@@ -109,8 +139,13 @@ class ConfigTest(unittest.TestCase):
                 "cache_url": cache_url,
                 "permission_url": postgresql_url,
                 "kinto_version": __version__,
-                "config_file_timestamp": strftime("%a, %d %b %Y %H:%M:%S %z"),
+                "config_file_timestamp": mock.ANY,
             },
+        )
+
+        self._assertTimestampStringsAlmostEqual(
+            strftime("%a, %d %b %Y %H:%M:%S %z"),  # expected
+            kwargs["config_file_timestamp"],  # actual
         )
 
     @mock.patch("kinto.config.render_template")
@@ -134,8 +169,13 @@ class ConfigTest(unittest.TestCase):
                 "cache_url": redis_url + "/2",
                 "permission_url": redis_url + "/3",
                 "kinto_version": __version__,
-                "config_file_timestamp": strftime("%a, %d %b %Y %H:%M:%S %z"),
+                "config_file_timestamp": mock.ANY,
             },
+        )
+
+        self._assertTimestampStringsAlmostEqual(
+            strftime("%a, %d %b %Y %H:%M:%S %z"),  # expected
+            kwargs["config_file_timestamp"],  # actual
         )
 
     @mock.patch("kinto.config.render_template")
@@ -157,8 +197,13 @@ class ConfigTest(unittest.TestCase):
                 "cache_url": "",
                 "permission_url": "",
                 "kinto_version": __version__,
-                "config_file_timestamp": strftime("%a, %d %b %Y %H:%M:%S %z"),
+                "config_file_timestamp": mock.ANY,
             },
+        )
+
+        self._assertTimestampStringsAlmostEqual(
+            strftime("%a, %d %b %Y %H:%M:%S %z"),  # expected
+            kwargs["config_file_timestamp"],  # actual
         )
 
     def test_render_template_works_with_file_in_cwd(self):
@@ -178,6 +223,6 @@ class ConfigTest(unittest.TestCase):
                 "permission_url": "",
                 "kinto_version": "",
                 "config_file_timestamp": "",
-            }
+            },
         )
         self.assertTrue(os.path.exists(os.path.join(temp_path, "kinto.ini")))

@@ -1,10 +1,8 @@
-import functools
 from unittest import mock
 
-from pyramid.security import IAuthorizationPolicy, Authenticated, Everyone
+from pyramid.security import IAuthorizationPolicy, Authenticated
 from zope.interface import implementer
 
-from kinto.core.authorization import PRIVATE
 from kinto.core import testing
 from kinto.core.storage.exceptions import BackendError
 from kinto.core.utils import sqlalchemy
@@ -26,7 +24,7 @@ class BaseWebTest(testing.BaseWebTest):
     principal = USER_PRINCIPAL
 
     authorization_policy = "tests.core.support.AllowAuthorizationPolicy"
-    collection_url = "/mushrooms"
+    plural_url = "/mushrooms"
 
     @classmethod
     def setUpClass(cls):
@@ -37,6 +35,7 @@ class BaseWebTest(testing.BaseWebTest):
     def get_app_settings(cls, extras=None):
         if extras is None:
             extras = {}
+        extras.setdefault("settings_prefix", "myapp")
         extras.setdefault("project_name", "myapp")
         extras.setdefault("project_version", "0.0.1")
         extras.setdefault("http_api_version", "0.1")
@@ -48,41 +47,17 @@ class BaseWebTest(testing.BaseWebTest):
     def get_item_url(self, id=None):
         """Return the URL of the item using self.item_url."""
         if id is None:
-            id = self.record["id"]
-        return "{}/{}".format(self.collection_url, id)
+            id = self.obj["id"]
+        return "{}/{}".format(self.plural_url, id)
 
 
 @implementer(IAuthorizationPolicy)
 class AllowAuthorizationPolicy:
     def permits(self, context, principals, permission):
-        if permission == PRIVATE:
-            return Authenticated in principals
-        if Everyone in principals:
-            return True
-        # Kinto-Core default authz policy uses prefixed_userid.
-        prefixed = [context.prefixed_userid]
-        return USER_PRINCIPAL in (principals + prefixed)
+        return Authenticated in principals
 
     def principals_allowed_by_permission(self, context, permission):
         raise NotImplementedError()  # PRAGMA NOCOVER
-
-
-def authorize(permits=True, authz_class=None):
-    """Patch the default authorization policy to return what is specified
-    in :param:permits.
-    """
-    if authz_class is None:
-        authz_class = "tests.core.support.AllowAuthorizationPolicy"
-
-    def wrapper(f):
-        @functools.wraps(f)
-        def wrapped(*args, **kwargs):
-            with mock.patch("{}.permits".format(authz_class), return_value=permits):
-                return f(*args, **kwargs)
-
-        return wrapped
-
-    return wrapper
 
 
 class PostgreSQLTest(BaseWebTest):

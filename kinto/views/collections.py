@@ -13,10 +13,10 @@ class CollectionSchema(resource.ResourceSchema):
 
 @resource.register(
     name="collection",
-    collection_path="/buckets/{{bucket_id}}/collections",
-    record_path="/buckets/{{bucket_id}}/collections/{{id}}",
+    plural_path="/buckets/{{bucket_id}}/collections",
+    object_path="/buckets/{{bucket_id}}/collections/{{id}}",
 )
-class Collection(resource.ShareableResource):
+class Collection(resource.Resource):
     schema = CollectionSchema
     permissions = ("read", "write", "record:create")
 
@@ -25,18 +25,18 @@ class Collection(resource.ShareableResource):
         parent_id = utils.instance_uri(request, "bucket", id=bucket_id)
         return parent_id
 
-    def process_record(self, new, old=None):
+    def process_object(self, new, old=None):
         """Additional collection schema validation from bucket, if any."""
-        new = super().process_record(new, old)
+        new = super().process_object(new, old)
 
         # Remove internal and auto-assigned fields.
-        internal_fields = (
-            self.model.id_field,
-            self.model.modified_field,
-            self.model.permissions_field,
-        )
+        internal_fields = (self.model.modified_field, self.model.permissions_field)
         validate_from_bucket_schema_or_400(
-            new, resource_name="collection", request=self.request, ignore_fields=internal_fields
+            new,
+            resource_name="collection",
+            request=self.request,
+            ignore_fields=internal_fields,
+            id_field=self.model.id_field,
         )
         return new
 
@@ -48,12 +48,12 @@ def on_collections_deleted(event):
     storage = event.request.registry.storage
     permission = event.request.registry.permission
 
-    for change in event.impacted_records:
+    for change in event.impacted_objects:
         collection = change["old"]
         bucket_id = event.payload["bucket_id"]
         parent_id = utils.instance_uri(
             event.request, "collection", bucket_id=bucket_id, id=collection["id"]
         )
-        storage.delete_all(collection_id=None, parent_id=parent_id, with_deleted=False)
-        storage.purge_deleted(collection_id=None, parent_id=parent_id)
+        storage.delete_all(resource_name=None, parent_id=parent_id, with_deleted=False)
+        storage.purge_deleted(resource_name=None, parent_id=parent_id)
         permission.delete_object_permissions(parent_id + "/*")

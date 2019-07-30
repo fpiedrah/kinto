@@ -101,15 +101,15 @@ autodoc_member_order = "bysource"
 # See: http://stackoverflow.com/a/30624034/186202
 nitpicky = True
 nitpick_ignore = [
-    ("py:class", "Exception"),
     ("py:class", "bool"),
-    ("py:class", "cornice.Service"),
     ("py:class", "dict"),
     ("py:class", "float"),
     ("py:class", "int"),
     ("py:class", "list"),
     ("py:class", "str"),
     ("py:class", "tuple"),
+    ("py:class", "Exception"),
+    ("py:class", "cornice.Service"),
     # Member autodoc fails with those:
     # kinto.core.resource.schema
     ("py:class", "Integer"),
@@ -117,8 +117,6 @@ nitpick_ignore = [
     # kinto.core.resource
     ("py:class", "Model"),
     ("py:class", "ResourceSchema"),
-    ("py:class", "ShareableModel"),
-    ("py:class", "ShareableViewSet"),
     ("py:class", "ViewSet"),
     ("py:class", "Sequence"),
     # kinto.core.resource.schema

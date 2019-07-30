@@ -12,7 +12,7 @@ A set of «sub commands» are available.
 
 ::
 
-    usage: kinto [-h] {init,start,migrate,delete-collection,version,rebuild-quotas} ...
+    usage: kinto [-h] {init,start,migrate,version,rebuild-quotas} ...
 
     Kinto Command-Line Interface
 
@@ -22,7 +22,7 @@ A set of «sub commands» are available.
     subcommands:
       Main Kinto CLI commands
 
-      {init,start,migrate,delete-collection,version,rebuild-quotas}
+      {init,start,migrate,version,rebuild-quotas}
                             Choose and run with --help
 
 
@@ -83,36 +83,6 @@ Starts Kinto locally using a simple HTTP server.
     This **not** recommended for production. :ref:`See more details <run-production>`.
 
 
-Delete a collection
--------------------
-
-Deletes a collection and its underlying objects from the ``storage`` and ``permission`` backends.
-
-.. warning::
-
-    Objects are permanently deleted, and there is no way to cancel the operation.
-
-::
-
-    usage: kinto delete-collection [-h] --bucket BUCKET --collection COLLECTION
-
-    optional arguments:
-      -h, --help            show this help message and exit
-      --bucket BUCKET       The bucket where the collection belongs to.
-      --collection COLLECTION
-                            The collection to remove.
-
-For example:
-
-::
-
-    kinto delete-collection --ini=config/postgresql.ini --bucket=source --collection=source
-
-.. note::
-
-    This command does not go through the HTTP API and won't trigger
-    :class:`kinto.core.events.ResourceChanged` events.
-
 Rebuild quotas
 --------------
 
@@ -139,3 +109,18 @@ For example:
 ::
 
     kinto rebuild-quotas --ini=config/postgresql.ini
+
+Flush Cache
+-----------
+
+Clears the content of the cache backend. This can be useful for debugging.
+
+::
+
+    usage: kinto flush-cache [--ini INI_FILE]
+
+For example:
+
+::
+
+    kinto flush-cache --ini kinto.ini

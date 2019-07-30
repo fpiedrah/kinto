@@ -8,7 +8,7 @@ from kinto.schema_validation import validate_from_bucket_schema_or_400
 
 def validate_member(node, member):
     if member.startswith("/buckets/") or member == "system.Everyone":
-        raise colander.Invalid(node, "'{}' is not a valid user ID.".format(member))
+        raise colander.Invalid(node, f"'{member}' is not a valid user ID.")
 
 
 class GroupSchema(resource.ResourceSchema):
@@ -21,10 +21,10 @@ class GroupSchema(resource.ResourceSchema):
 
 @resource.register(
     name="group",
-    collection_path="/buckets/{{bucket_id}}/groups",
-    record_path="/buckets/{{bucket_id}}/groups/{{id}}",
+    plural_path="/buckets/{{bucket_id}}/groups",
+    object_path="/buckets/{{bucket_id}}/groups/{{id}}",
 )
-class Group(resource.ShareableResource):
+class Group(resource.Resource):
     schema = GroupSchema
 
     def get_parent_id(self, request):
@@ -32,18 +32,18 @@ class Group(resource.ShareableResource):
         parent_id = utils.instance_uri(request, "bucket", id=bucket_id)
         return parent_id
 
-    def process_record(self, new, old=None):
+    def process_object(self, new, old=None):
         """Additional collection schema validation from bucket, if any."""
-        new = super().process_record(new, old)
+        new = super().process_object(new, old)
 
         # Remove internal and auto-assigned fields.
-        internal_fields = (
-            self.model.id_field,
-            self.model.modified_field,
-            self.model.permissions_field,
-        )
+        internal_fields = (self.model.modified_field, self.model.permissions_field)
         validate_from_bucket_schema_or_400(
-            new, resource_name="group", request=self.request, ignore_fields=internal_fields
+            new,
+            resource_name="group",
+            request=self.request,
+            ignore_fields=internal_fields,
+            id_field=self.model.id_field,
         )
 
         return new
@@ -55,7 +55,7 @@ def on_groups_deleted(event):
     """
     permission_backend = event.request.registry.permission
 
-    for change in event.impacted_records:
+    for change in event.impacted_objects:
         group = change["old"]
         bucket_id = event.payload["bucket_id"]
         group_uri = utils.instance_uri(event.request, "group", bucket_id=bucket_id, id=group["id"])
@@ -71,14 +71,14 @@ def on_groups_changed(event):
     """
     permission_backend = event.request.registry.permission
 
-    for change in event.impacted_records:
+    for change in event.impacted_objects:
         if "old" in change:
             existing_record_members = set(change["old"].get("members", []))
         else:
             existing_record_members = set()
 
         group = change["new"]
-        group_uri = "/buckets/{bucket_id}/groups/{id}".format(id=group["id"], **event.payload)
+        group_uri = f"/buckets/{event.payload['bucket_id']}/groups/{group['id']}"
         new_record_members = set(group.get("members", []))
         new_members = new_record_members - existing_record_members
         removed_members = existing_record_members - new_record_members

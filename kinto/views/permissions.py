@@ -4,7 +4,7 @@ from pyramid.settings import aslist
 from kinto.authorization import PERMISSIONS_INHERITANCE_TREE
 from kinto.core import utils as core_utils, resource
 from kinto.core.storage import Sort
-from kinto.core.storage.memory import extract_record_set
+from kinto.core.storage.memory import extract_object_set
 
 
 def allowed_from_settings(settings, principals):
@@ -34,9 +34,7 @@ def allowed_from_settings(settings, principals):
             continue
         # ``collection_create_principals`` means ``collection:create`` in bucket.
         if permission == "create":
-            permission = "{resource_name}:{permission}".format(
-                resource_name=resource_name, permission=permission
-            )
+            permission = f"{resource_name}:{permission}"
             resource_name = {  # resource parents.
                 "collection": "bucket",
                 "group": "bucket",
@@ -60,7 +58,30 @@ class PermissionsModel:
     def timestamp(self, parent_id=None):
         return 0
 
-    def get_records(
+    def get_objects(
+        self,
+        filters=None,
+        sorting=None,
+        pagination_rules=None,
+        limit=None,
+        include_deleted=False,
+        parent_id=None,
+    ):
+        objects, _ = self._get_objects(
+            filters=filters,
+            sorting=sorting,
+            pagination_rules=pagination_rules,
+            limit=limit,
+            include_deleted=include_deleted,
+            parent_id=parent_id,
+        )
+        return objects
+
+    def count_objects(self, filters=None, parent_id=None):
+        _, count = self._get_objects(filters=filters, parent_id=parent_id)
+        return count
+
+    def _get_objects(
         self,
         filters=None,
         sorting=None,
@@ -100,7 +121,7 @@ class PermissionsModel:
         allowed_resources = {"bucket", "collection", "group"} & set(from_settings.keys())
         if allowed_resources:
             storage = self.request.registry.storage
-            every_bucket, _ = storage.get_all(parent_id="", collection_id="bucket")
+            every_bucket = storage.list_all(parent_id="", resource_name="bucket")
             for bucket in every_bucket:
                 bucket_uri = "/buckets/{id}".format_map(bucket)
                 for res in allowed_resources:
@@ -111,9 +132,9 @@ class PermissionsModel:
                         continue
                     # Fetch bucket collections and groups.
                     # XXX: wrong approach: query in a loop!
-                    every_subobjects, _ = storage.get_all(parent_id=bucket_uri, collection_id=res)
+                    every_subobjects = storage.list_all(parent_id=bucket_uri, resource_name=res)
                     for subobject in every_subobjects:
-                        subobj_uri = bucket_uri + "/{0}s/{1}".format(res, subobject["id"])
+                        subobj_uri = bucket_uri + f"/{res}s/{subobject['id']}"
                         perms_by_object_uri.setdefault(subobj_uri, set()).update(resource_perms)
 
         entries = []
@@ -147,11 +168,11 @@ class PermissionsModel:
                 uri=object_uri,
                 resource_name=resource_name,
                 permissions=list(permissions),
-                **matchdict
+                **matchdict,
             )
             entries.append(entry)
 
-        return extract_record_set(
+        return extract_object_set(
             entries,
             filters=filters,
             sorting=sorting,
@@ -177,11 +198,11 @@ class PermissionsSchema(resource.ResourceSchema):
 @resource.register(
     name="permissions",
     description="List of user permissions",
-    collection_path="/permissions",
-    record_path=None,
-    collection_methods=("GET",),
+    plural_path="/permissions",
+    object_path=None,
+    plural_methods=("HEAD", "GET"),
 )
-class Permissions(resource.ShareableResource):
+class Permissions(resource.Resource):
 
     schema = PermissionsSchema
 

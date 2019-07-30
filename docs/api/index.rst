@@ -11,6 +11,24 @@ API
 Changelog
 ---------
 
+1.22 (2019-03-20)
+'''''''''''''''''
+
+- New ``/accounts/{user id}/validate/{validation key}`` endpoint to validate a
+  created account when the ``account validation`` option is enabled for the
+  accounts plugin. See :ref:`account validation <accounts-validate>` (#1973)
+- New ``/accounts/{user id}/reset-password`` endpoint to request a temporary
+  reset password by email when the ``account validation`` option is enabled for
+  the accounts plugin. See :ref:`account validation <accounts-validate>` (#1973)
+
+
+1.21 (2019-01-10)
+'''''''''''''''''
+
+- The ``Total-Records`` header is no longer included in any GET request. Only available
+  in HEAD requests. Also, the name of that header is deprecated, but kept, in favor of
+  ``Total-Objects`` (#1624, #710)
+
 1.20 (2018-06-07)
 '''''''''''''''''
 

@@ -4,22 +4,38 @@ from kinto.authorization import PERMISSIONS_INHERITANCE_TREE
 from pyramid.exceptions import ConfigurationError
 
 from .authentication import AccountsAuthenticationPolicy as AccountsPolicy
-from .utils import ACCOUNT_CACHE_KEY, ACCOUNT_POLICY_NAME
+from .utils import (
+    ACCOUNT_CACHE_KEY,
+    ACCOUNT_POLICY_NAME,
+    ACCOUNT_RESET_PASSWORD_CACHE_KEY,
+    ACCOUNT_VALIDATION_CACHE_KEY,
+)
 
 
-__all__ = ["ACCOUNT_CACHE_KEY", "ACCOUNT_POLICY_NAME", "AccountsPolicy"]
+__all__ = [
+    "ACCOUNT_CACHE_KEY",
+    "ACCOUNT_POLICY_NAME",
+    "ACCOUNT_RESET_PASSWORD_CACHE_KEY",
+    "ACCOUNT_VALIDATION_CACHE_KEY",
+    "AccountsPolicy",
+]
 
 DOCS_URL = "https://kinto.readthedocs.io/en/stable/api/1.x/accounts.html"
 
 
 def includeme(config):
+    settings = config.get_settings()
+    validation_enabled = settings.get("account_validation", False)
     config.add_api_capability(
         "accounts",
         description="Manage user accounts.",
         url="https://kinto.readthedocs.io/en/latest/api/1.x/accounts.html",
+        validation_enabled=validation_enabled,
     )
-
-    config.scan("kinto.plugins.accounts.views")
+    kwargs = {}
+    if not validation_enabled:
+        kwargs["ignore"] = "kinto.plugins.accounts.views.validation"
+    config.scan("kinto.plugins.accounts.views", **kwargs)
 
     PERMISSIONS_INHERITANCE_TREE["root"].update({"account:create": {}})
     PERMISSIONS_INHERITANCE_TREE["account"] = {
@@ -27,7 +43,12 @@ def includeme(config):
         "read": {"account": ["write", "read"]},
     }
 
-    settings = config.get_settings()
+    if validation_enabled:
+        # Valid mailers other than the default are `debug` and `testing`
+        # according to
+        # https://docs.pylonsproject.org/projects/pyramid_mailer/en/latest/#debugging
+        mailer = settings.get("mail.mailer", "")
+        config.include("pyramid_mailer" + (f".{mailer}" if mailer else ""))
 
     # Check that the account policy is mentioned in config if included.
     accountClass = "AccountsPolicy"
@@ -40,8 +61,9 @@ def includeme(config):
 
     if not policy:
         error_msg = (
-            "Account policy missing the 'multiauth.policy.*.use' " "setting. See {} in docs {}."
-        ).format(accountClass, DOCS_URL)
+            "Account policy missing the 'multiauth.policy.*.use' "
+            f"setting. See {accountClass} in docs {DOCS_URL}."
+        )
         raise ConfigurationError(error_msg)
 
     # Add some safety to avoid weird behaviour with basicauth default policy.
@@ -72,7 +94,7 @@ def includeme(config):
             "able to create their own accounts. This may not be what you want.\n"
             "If you want these users to be able to create accounts for other users, "
             "add them to account_write_principals.\n"
-            "Affected users: {}".format(list(cant_create_anything))
+            f"Affected users: {list(cant_create_anything)}"
         )
 
         raise ConfigurationError(message)

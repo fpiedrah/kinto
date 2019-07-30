@@ -15,6 +15,7 @@ Contributors
 * Ayush Sharma <ayush.aceit@gmail.com>
 * Balthazar Rouberol <br@imap.cc>
 * Boris Feld <lothiraldan@gmail.com>
+* Brady Dufresne <dufresnebrady@gmail.com>
 * Castro
 * Chirag B. Jadwani <chirag.jadwani@gmail.com>
 * Christophe Gragnic <cgragnic@protonmail.com>
@@ -28,9 +29,11 @@ Contributors
 * Éric Lemoine <eric.lemoine@gmail.com>
 * Ethan Glasser-Camp <ethan@betacantrips.com>
 * Étienne <@Étienne>
+* Eugene Kulak <kulak.eugene@gmail.com>
 * Fil <fil@rezo.net>
 * FooBarQuaxx
 * Francisco J. Piedrahita <@fpiedrah>
+* Frank Bertsch <frank@mozilla.com>
 * Greeshma <greeshmabalabadra@gmail.com>
 * Gabriela Surita <gabsurita@gmail.com>
 * George Smith <h3rmit@protonmail.com>
@@ -48,6 +51,7 @@ Contributors
 * Kulshekhar Kabra <@kulshekhar>
 * Lavish Aggarwal <lucky.lavish@gmail.com>
 * Maksym Shalenyi <supamaxy@gmail.com>
+* Manas Mangaonkar <@Pac23>
 * Mansimar Kaur <mansimarkaur.mks@gmail.com>
 * Masataka Takeuchi <masataka.takeuchi@l-is-b.com>
 * Mathieu Agopian <mathieu@agopian.info>
@@ -65,9 +69,11 @@ Contributors
 * Pascal Roessner <roessner.pascal@gmail.com>
 * PeriGK <per.gkolias@gmail.com>
 * Peter Bengtsson <mail@peterbe.com>
+* Peter Rassias <ubcpeter@hotmail.com>
 * realsumit <sumitsarinofficial@gmail.com>
 * Rektide <rektide@voodoowarez.com>
 * Rémy Hubscher <rhubscher@mozilla.com>
+* Renisha Nellums <r.nellums@gmail.com>
 * Ricardo <@rkleine>
 * Rodolphe Quiédeville <rodolphe@quiedeville.org>
 * Sahil Dua <sahildua2305@gmail.com>
@@ -83,6 +89,7 @@ Contributors
 * Surya Prashanth <prashantsurya@ymail.com>
 * SwhGo_oN <@swhgoon>
 * Tarek Ziade <tarek@mozilla.com>
+* Taus Brock-Nannestad <taus@semmle.com>
 * Taylor Zane Glaeser <tzglaeser@gmail.com>
 * Thomas Dressler <Thomas.Dressler1@gmail.com>
 * Tiberiu Ichim <@tiberiuichim>

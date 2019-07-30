@@ -15,7 +15,8 @@ PostgreSQL
 Redis
 -----
 
-.. autoclass:: kinto_redis.storage.Storage
+See `Kinto Redis driver plugin repository <https://github.com/Kinto/kinto-redis>`_
+for more information.
 
 
 Memory
@@ -52,6 +53,6 @@ Storage can be used to store arbitrary data.
     user_id = request.authenticated_userid
 
     storage = request.registry.storage
-    storage.create(collection_id='__custom', parent_id='', record=data)
+    storage.create(resource_name='__custom', parent_id='', obj=data)
 
 See the :ref:`resource-model` class to manipulate collections of records.

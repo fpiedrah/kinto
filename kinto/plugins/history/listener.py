@@ -25,7 +25,7 @@ def on_resource_changed(event):
     excluded_resources = aslist(settings.get("history.exclude_resources", ""))
 
     targets = []
-    for impacted in event.impacted_records:
+    for impacted in event.impacted_objects:
         target = impacted["new"]
         obj_id = target["id"]
 
@@ -87,7 +87,7 @@ def on_resource_changed(event):
     read_principals.update(collection_perms.get("read", []))
     read_principals.update(collection_perms.get("write", []))
 
-    # Create a history entry for each impacted record.
+    # Create a history entry for each impacted object.
     for (uri, target) in targets:
         obj_id = target["id"]
         # Prepare the history entry attributes.
@@ -95,25 +95,25 @@ def on_resource_changed(event):
         eventattrs = dict(**payload)
         eventattrs.pop("timestamp", None)  # Already in target `last_modified`.
         eventattrs.pop("bucket_id", None)
-        eventattrs["{}_id".format(resource_name)] = obj_id
+        eventattrs[f"{resource_name}_id"] = obj_id
         eventattrs["uri"] = uri
         attrs = dict(
             date=datetime.now().isoformat(),
             target={"data": target, "permissions": perms},
-            **eventattrs
+            **eventattrs,
         )
 
-        # Create a record for the 'history' resource, whose parent_id is
+        # Create an entry for the 'history' resource, whose parent_id is
         # the bucket URI (c.f. views.py).
         # Note: this will be rolledback if the transaction is rolledback.
-        entry = storage.create(parent_id=bucket_uri, collection_id="history", record=attrs)
+        entry = storage.create(parent_id=bucket_uri, resource_name="history", obj=attrs)
 
         # The read permission on the newly created history entry is the union
-        # of the record permissions with the one from bucket and collection.
+        # of the object permissions with the one from bucket and collection.
         entry_principals = set(read_principals)
         entry_principals.update(perms.get("read", []))
         entry_principals.update(perms.get("write", []))
         entry_perms = {"read": list(entry_principals)}
         # /buckets/{id}/history is the URI for the list of history entries.
-        entry_perm_id = "/buckets/{}/history/{}".format(bucket_id, entry["id"])
+        entry_perm_id = f"/buckets/{bucket_id}/history/{entry['id']}"
         permission.replace_object_permissions(entry_perm_id, entry_perms)

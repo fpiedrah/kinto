@@ -1,3 +1,4 @@
+import base64
 import urllib.parse
 
 import colander
@@ -115,14 +116,14 @@ def get_login(request):
 
     # Redirect the client to the Identity Provider that will eventually redirect
     # to the OpenID token endpoint.
-    token_uri = request.route_url("openid_token", provider=provider) + "?"
+    token_uri = request.route_url("openid_token", provider=provider)
     params = dict(
         client_id=client_id, response_type="code", scope=scope, redirect_uri=token_uri, state=state
     )
     if prompt:
         # The 'prompt' parameter is optional.
         params["prompt"] = prompt
-    redirect = "{}?{}".format(auth_endpoint, urllib.parse.urlencode(params))
+    redirect = f"{auth_endpoint}?{urllib.parse.urlencode(params)}"
     raise httpexceptions.HTTPTemporaryRedirect(redirect)
 
 
@@ -174,7 +175,7 @@ def get_token(request):
 
     # Trade the code for tokens on the Identity Provider.
     # Google Identity requires to specify again redirect_uri.
-    redirect_uri = request.route_url("openid_token", provider=provider) + "?"
+    redirect_uri = request.route_url("openid_token", provider=provider)
     data = {
         "code": code,
         "client_id": client_id,
@@ -186,5 +187,7 @@ def get_token(request):
 
     # The IdP response is forwarded to the client in the querystring/location hash.
     # (eg. callback=`http://localhost:3000/#tokens=`)
-    redirect = callback + urllib.parse.quote(resp.text)
+    token_info = resp.text.encode("utf-8")
+    encoded_token = base64.b64encode(token_info)
+    redirect = callback + urllib.parse.quote(encoded_token.decode("utf-8"))
     raise httpexceptions.HTTPTemporaryRedirect(redirect)

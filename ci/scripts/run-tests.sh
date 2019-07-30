@@ -1,6 +1,6 @@
 #!/bin/bash
 
-apt install python3-pip make
+apt install build-essential python-pip
 
 make install-dev
 make test

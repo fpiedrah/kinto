@@ -20,8 +20,12 @@ jobs:
           platform: linux
           image_resource:
             type: registry-image
-            source: { repository: busybox }
+            source: { repository: ubuntu }
           run:
-            #path: ./kinto-git/ci/scripts/run-tests
-            path: ls
-            args: ["-la", "./kinto-git"]
+            #path: ./kinto-git/ci/scripts/run-tests.sh
+            #path: ls
+            #args: ["-la", "./kinto-git/ci/scripts"]
+            #path: cat
+            #args: ["./kinto-git/ci/scripts/run-tests.sh"]
+            path: sh
+            args: ["./kinto-git/ci/scripts/run-tests.sh"]

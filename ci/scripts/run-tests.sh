@@ -1,7 +1,6 @@
 #!/bin/bash
 
-apt-get install postgresql-dev
-pip install virtualenv
+sudo apt install python3-pip
 
 make install-dev
 make test

@@ -1,6 +1,5 @@
 #!/bin/bash
 
-apt-get update && apt install build-essential python-pip
-
+apt-get update -y && apt install -y build-essential python-pip
 make install-dev
 make test
